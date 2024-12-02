@@ -1,33 +1,23 @@
 import os
 import json
+import click
+import subprocess
 from typing import List
 from InquirerPy import inquirer
+from dotenv import load_dotenv
+from alias import load_aliases
 
-ALIAS_FILE = "E:\\Develepment (DEV)\\devCLI\\alias.json"
-
-# Ensure the alias file exists
-def ensure_alias_file():
-    if not os.path.exists(ALIAS_FILE):
-        with open(ALIAS_FILE, "w") as f:
-            json.dump({}, f)
-
-# Load aliases from the JSON file
-def load_aliases():
-    ensure_alias_file()
-    with open(ALIAS_FILE, "r") as f:
-        return json.load(f)
-
-# Save aliases to the JSON file
-def save_aliases(aliases):
-    with open(ALIAS_FILE, "w") as f:
-        json.dump(aliases, f, indent=4)
+load_dotenv()
+BASE_PATH = os.getenv("BASE_PATH")
+VSCODE_PATH = os.getenv("VSCODE_PATH")
+NPM_PATH = os.getenv("NPM_PATH")
 
 ## Fuction to get dirs in a path
 def get_dirs_in_path(path: str) -> List[str]:
     return [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
 
 
-def select_dir_with_package_json(base_path="."):
+def select_dir_with_package_json():
     """
     Allows the user to select a directory containing a `package.json` file using arrow keys.
     Keeps prompting until a valid directory is chosen or exits if none are available.
@@ -38,9 +28,9 @@ def select_dir_with_package_json(base_path="."):
     while True:
         # Get a list of directories containing `package.json`
         dirs_with_package_json = [
-            d for d in os.listdir(base_path)
-            if os.path.isdir(os.path.join(base_path, d)) and
-            os.path.exists(os.path.join(base_path, d, "package.json"))
+            d for d in os.listdir(BASE_PATH)
+            if os.path.isdir(os.path.join(BASE_PATH, d)) and
+            os.path.exists(os.path.join(BASE_PATH, d, "package.json"))
         ]
 
         if not dirs_with_package_json:
@@ -55,4 +45,67 @@ def select_dir_with_package_json(base_path="."):
         ).execute()
 
         # Return the selected directory
-        return os.path.join(base_path, selected_dir)
+        return os.path.join(BASE_PATH, selected_dir)
+
+
+def resolve_folder(folder_name, alias):
+    """
+    Resolve the folder name using alias if applicable and validate existence.
+    """
+    if alias:
+        aliases = load_aliases()
+        if folder_name not in aliases:
+            click.echo(f"Error: Alias '{folder_name}' does not exist.")
+            return None
+        folder_name = aliases[folder_name]
+
+    target_dir = os.path.join(BASE_PATH, folder_name)
+    if not os.path.exists(target_dir):
+        click.echo(f"Error: Folder '{target_dir}' does not exist.")
+        return None
+
+    return target_dir
+
+def validate_package_json(target_dir):
+    """
+    Check if 'package.json' exists in the target directory.
+    """
+    package_json_path = os.path.join(target_dir, "package.json")
+    if not os.path.exists(package_json_path):
+        click.echo(f"Error: 'package.json' does not exist in the folder '{target_dir}'.")
+        return False
+    return True
+
+def change_directory(target_dir):
+    """
+    Change the working directory to the target directory.
+    """
+    os.chdir(target_dir)
+    click.echo(f"Changed directory to: {target_dir}")
+
+def open_in_vscode():
+    """
+    Open the current directory in Visual Studio Code.
+    """
+    try:
+        subprocess.run([VSCODE_PATH, "."], check=True)
+    except FileNotFoundError:
+        click.echo("Error: Visual Studio Code is not installed or the path is incorrect.")
+
+
+def run_npm_dev():
+    """
+    Run 'npm run dev' and handle errors.
+    """
+    try:
+        subprocess.run([NPM_PATH, "run", "dev"], check=True)
+    except subprocess.CalledProcessError as e:
+        click.echo(f"Error: Command 'npm run dev' failed with exit code {e.returncode}. Attempting recovery...")
+        try:
+            subprocess.run([NPM_PATH, "i", "--force"], check=True)
+        except subprocess.CalledProcessError as install_error:
+            click.echo(f"Error: 'npm i --force' failed with exit code {install_error.returncode}.")
+    except FileNotFoundError:
+        click.echo("Error: 'npm' is not installed or not in your PATH.")
+
+
