@@ -1,5 +1,4 @@
 import os
-import json
 import click
 import subprocess
 from typing import List

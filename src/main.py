@@ -1,5 +1,5 @@
 import click
-from dev import run_dev, alias, code
+from commands import run_dev, alias, code
 
 
 @click.group(help="General commands")
