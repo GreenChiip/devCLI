@@ -2,14 +2,11 @@ import click
 from utils import open_in_vscode, run_npm_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory
 from alias import handle_add_alias, handle_remove_alias, handle_list_aliases, load_aliases
 
-base_path = "E:\\Develepment (DEV)"
-
 @click.command("run", help="Run 'npm run dev' in the specified folder.")
 @click.argument('folder_name')
 @click.option("--alias", "-a", help="Use an alias instead of a folder name.", is_flag=True)
 @click.option("--code", "-c", help="Open VScode", is_flag=True)
 def run_dev(folder_name, alias, code):
-    # target_dir = os.path.join(base_path, folder_name)
     target_dir = resolve_folder(folder_name, alias)
     if not target_dir:
         return
