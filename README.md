@@ -95,7 +95,7 @@ dev alias add <alias_name> <alias_for>
 ```
 Example:
 ```bash
-dev alias add myproject "C:\\Projects\\MyProject"
+dev alias add myproject "MyProject\\subFolder"
 ```
 
 ### Removing an Alias
