@@ -28,7 +28,7 @@ This project provides a CLI tool to manage and streamline development workflows.
 Run the following command to install dependencies:
 
 ```bash
-pip install click python-dotenv
+pip install click python-dotenv InquirerPy
 ```
 
 
@@ -64,7 +64,7 @@ BASE_PATH=</full/path>
    ```
 2. Add the following line:
    ```powershell
-   function dev { python path\\to\\your\\script.py @args }
+   function dev { python path\\to\\your\\src\\main.py @args }
    ```
 3. Save the file and reload the profile:
    ```powershell
@@ -78,7 +78,7 @@ BASE_PATH=</full/path>
    ```
 2. Add the following line:
    ```bash
-   alias dev="python /path/to/your/script.py"
+   alias dev="python /path/to/your/src/main.py"
    ```
 3. Save the file and reload the shell:
    ```bash
