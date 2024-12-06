@@ -9,10 +9,21 @@ This project provides a CLI tool to manage and streamline development workflows.
 - ✨ Open projects in Visual Studio Code.
 - 🔥 Automatically run `npm run dev`.
     - 📂 Looks after `package.json` in selected folder.
+- 🐳 **Docker Support**: Includes a fast method to boot any `docker compose` projects.
+
 
 > [!NOTE]
 > _Other commands coming as the need is there_ 
 
+### TODO
+- 🛠️ Add an `init` function to generate a new project, complete with Docker Compose setup:
+    - 🐍 **Python**: Pre-configured with virtual environment and basic Docker support.
+    - 🟢 **Node**: Pre-configured with `npm init` and a Docker environment.
+        - **NextJS**: as framework..
+    - ❓ **More**: Expand support based on the need (e.g., Ruby, Go, or Java).
+
+
+- Rewrite **Setup** after testing...
 
 
 ## ⚙️ Setup
@@ -30,7 +41,6 @@ Run the following command to install dependencies:
 ```bash
 pip install click python-dotenv InquirerPy
 ```
-
 
 
 ### 2. Create a `.env` File
