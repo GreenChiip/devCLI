@@ -1,5 +1,5 @@
 import click
-from utils import open_in_vscode, run_npm_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory
+from utils import open_in_vscode, run_npm_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
 from alias import handle_add_alias, handle_remove_alias, handle_list_aliases, load_aliases
 
 @click.command("run", help="Run 'npm run dev' in the specified folder.")
@@ -50,3 +50,18 @@ def code(folder_name, alias):
     
     change_directory(target_dir)
     open_in_vscode()
+    
+
+@click.command("docker", help="Run docker-compose up in the specified folder.")
+@click.argument('folder_name')
+@click.argument('state', required=True, type=click.Choice(["up", "down"], case_sensitive=False))
+@click.option("--alias", "-a", help="Use an alias instead of a folder name.", is_flag=True)
+@click.option("--build", "-b", help="Build images before starting containers.", is_flag=True)
+@click.option("--detach", "-d", help="Run containers in the background.", is_flag=True)
+def docker(folder_name, state, alias, build, detach):
+    target_dir = resolve_folder(folder_name, alias)
+    if not target_dir:
+        return
+
+    change_directory(target_dir)
+    run_docker_compose_up(state, build, detach)

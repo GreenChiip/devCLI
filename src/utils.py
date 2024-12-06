@@ -10,6 +10,7 @@ load_dotenv()
 BASE_PATH = os.getenv("BASE_PATH")
 VSCODE_PATH = os.getenv("VSCODE_PATH")
 NPM_PATH = os.getenv("NPM_PATH")
+DOCKER_PATH = os.getenv("DOCKER_PATH")
 
 ## Fuction to get dirs in a path
 def get_dirs_in_path(path: str) -> List[str]:
@@ -108,3 +109,17 @@ def run_npm_dev():
         click.echo("Error: 'npm' is not installed or not in your PATH.")
 
 
+def run_docker_compose_up(state, build, detach):
+    ## Run docker-compose with the provided arguments
+    args = [state]
+    if build:
+        args.append("--build")
+    if detach:
+        args.append("--detach")
+
+    try:
+        subprocess.run(["docker", "compose"] + args, check=True)
+    except FileNotFoundError:
+        click.echo("Error: 'docker compose' is not installed or not in your PATH.")
+    except subprocess.CalledProcessError as e:
+        click.echo(f"Error: Command 'docker compose {state}' failed with exit code {e.returncode}.")
