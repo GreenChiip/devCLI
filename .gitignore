@@ -2,3 +2,4 @@ src/__pycache__/*
 alias.json
 .env
 .DS_Store
+*.josn
