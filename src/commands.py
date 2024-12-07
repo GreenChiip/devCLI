@@ -1,6 +1,8 @@
-import click
+import click, os
+from InquirerPy import inquirer
 from utils import open_in_vscode, run_npm_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
 from alias import handle_add_alias, handle_remove_alias, handle_list_aliases, load_aliases
+from create import get_project_details, generate_project_json, create_project_files
 
 @click.command("run", help="Run 'npm run dev' in the specified folder.")
 @click.argument('folder_name')
@@ -65,3 +67,42 @@ def docker(folder_name, state, alias, build, detach):
 
     change_directory(target_dir)
     run_docker_compose_up(state, build, detach)
+
+# TODO: 
+
+
+@click.command("init", help="Create a new project folder with a devCLI-project.json file.")
+@click.argument("project_folder")
+def init(project_folder):
+    """
+    Initialize a new project with a devCLI-project.json file and prompt the user for details.
+    """
+    # Ensure the folder does not already exist
+    target_dir = resolve_folder(project_folder, alias)
+    if not target_dir:
+        return
+
+
+    os.makedirs(project_folder)
+    click.echo(f"📁 Created project folder: {project_folder}")
+
+    # Gather project details
+    project_details = get_project_details()
+    project_type = project_details["type"]
+
+    # Generate devCLI-project.json
+    generate_project_json(project_folder, project_details)
+
+    # Add folder to aliases if confirmed
+    if inquirer.confirm(message="Do you want to add this folder to your aliases?").execute():
+        alias_name = inquirer.text(message="Enter alias name:", default=project_details["name"]).execute()
+        aliases = load_aliases()
+        if alias_name in aliases:
+            click.echo(f"⚠️ Alias '{alias_name}' already exists.")
+            return
+        handle_add_alias(aliases, alias_name, project_folder)
+
+    # Create project-specific files
+    create_project_files(project_folder, project_type)
+
+    click.echo(f"✅ Project '{project_details['name']}' initialized successfully!")

@@ -123,3 +123,5 @@ def run_docker_compose_up(state, build, detach):
         click.echo("Error: 'docker compose' is not installed or not in your PATH.")
     except subprocess.CalledProcessError as e:
         click.echo(f"Error: Command 'docker compose {state}' failed with exit code {e.returncode}.")
+        
+        
