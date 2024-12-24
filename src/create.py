@@ -65,7 +65,7 @@ def generate_project_json(project_details):
     project_json_path = os.path.join(project_details["name"], "devCLI-project.json")
     with open(project_json_path, "w") as f:
         json.dump(project_json, f, indent=4)
-    click.echo(f"📄 Created devCLI-project.json in {project_details["name"]}")
+    click.echo(f"📄 Created devCLI-project.json in {project_details['name']}")
 
 
 def create_node_files(project_details):
@@ -73,7 +73,7 @@ def create_node_files(project_details):
     Generate files for a Node.js project based on the selected framework.
     """
     subprocess.run([NPX_PATH, "create-next-app@latest", "app", "--yes"], check=True)
-    handle_add_alias(load_aliases(), project_details["name"], f"{project_details["name"]}/app")
+    handle_add_alias(load_aliases(), project_details['name'], f"{project_details['name']}/app")
     click.echo("🦄 NextJS project created.")
     
 
@@ -83,7 +83,7 @@ def create_python_files(project_details):
     """
     Generate files for a Python project, including Docker configuration.
     """
-    open(os.path.join(project_details["name"], "main.py"), "w").close()
+    open(os.path.join(project_details['name'], "main.py"), "w").close()
 
     dockerfile = (
         "FROM python:3.9-slim\n"
@@ -91,7 +91,7 @@ def create_python_files(project_details):
         "COPY . .\n"
         "CMD [\"python\", \"main.py\"]"
     )
-    with open(os.path.join(project_details["name"], "Dockerfile"), "w") as f:
+    with open(os.path.join(project_details['name'], "Dockerfile"), "w") as f:
         f.write(dockerfile)
 
     docker_compose = (
@@ -122,5 +122,5 @@ def create_project_files(project_details):
     if project_details["type"] in project_file_generators:
         project_file_generators[project_details["type"]](project_details["name"])
     else:
-        click.echo(f"⚠️ Unsupported project type: {project_details["type"]}")
+        click.echo(f"⚠️ Unsupported project type: {project_details['type']}")
 
