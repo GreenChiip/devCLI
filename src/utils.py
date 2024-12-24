@@ -55,15 +55,11 @@ def resolve_folder(folder_name, alias):
     if alias:
         aliases = load_aliases()
         if folder_name not in aliases:
-            click.echo(f"Error: Alias '{folder_name}' does not exist.")
-            return None
+            return False
         folder_name = aliases[folder_name]
-
     target_dir = os.path.join(BASE_PATH, folder_name)
     if not os.path.exists(target_dir):
-        click.echo(f"Error: Folder '{target_dir}' does not exist.")
-        return None
-
+        return False
     return target_dir
 
 def validate_package_json(target_dir):
