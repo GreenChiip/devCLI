@@ -11,6 +11,7 @@ BASE_PATH = os.getenv("BASE_PATH")
 VSCODE_PATH = os.getenv("VSCODE_PATH")
 NPM_PATH = os.getenv("NPM_PATH")
 DOCKER_PATH = os.getenv("DOCKER_PATH")
+BUN_PATH = os.getenv("BUN_PATH")
 
 ## Fuction to get dirs in a path
 def get_dirs_in_path(path: str) -> List[str]:
@@ -48,40 +49,41 @@ def select_dir_with_package_json():
         return os.path.join(BASE_PATH, selected_dir)
 
 
-def resolve_folder(folder_name, alias):
+def resolve_folder(folder_name):
     """
     Resolve the folder name using alias if applicable and validate existence.
     """
-    if alias:
-        aliases = load_aliases()
-        if folder_name not in aliases:
-            return False
+    aliases = load_aliases()
+    if folder_name in aliases:
         folder_name = aliases[folder_name]
+    
     target_dir = os.path.join(BASE_PATH, folder_name)
     if not os.path.exists(target_dir):
-        return False
+        return None
+    
     return target_dir
+
+def isBun(target_dir):
+    """
+        Check if 'bun.lock' exists in the target directory.
+    """
+    return os.path.exists(os.path.join(target_dir, "bun.lock"))
 
 def validate_package_json(target_dir):
     """
-    Check if 'package.json' exists in the target directory.
+        Check if 'package.json' exists in the target directory.
     """
-    package_json_path = os.path.join(target_dir, "package.json")
-    if not os.path.exists(package_json_path):
-        click.echo(f"Error: 'package.json' does not exist in the folder '{target_dir}'.")
-        return False
-    return True
+    return os.path.exists(os.path.join(target_dir, "package.json"))
 
 def change_directory(target_dir):
     """
-    Change the working directory to the target directory.
+        Change the working directory to the target directory.
     """
     os.chdir(target_dir)
-    click.echo(f"Changed directory to: {target_dir}")
 
 def open_in_vscode():
     """
-    Open the current directory in Visual Studio Code.
+        Open the current directory in Visual Studio Code.
     """
     try:
         subprocess.run([VSCODE_PATH, "."], check=True)
@@ -91,7 +93,7 @@ def open_in_vscode():
 
 def run_npm_dev():
     """
-    Run 'npm run dev' and handle errors.
+        Run 'npm run dev' and handle errors.
     """
     try:
         subprocess.run([NPM_PATH, "run", "dev"], check=True)
@@ -103,6 +105,22 @@ def run_npm_dev():
             click.echo(f"Error: 'npm i --force' failed with exit code {install_error.returncode}.")
     except FileNotFoundError:
         click.echo("Error: 'npm' is not installed or not in your PATH.")
+
+
+def run_bun_dev():
+    """
+        Run 'bun dev' and handle errors.
+    """
+    try:
+        subprocess.run([BUN_PATH, "dev"], check=True)
+    except subprocess.CalledProcessError as e:
+        click.echo(f"Error: Command 'bun dev' failed with exit code {e.returncode}. Attempting recovery...")
+        try:
+            subprocess.run([BUN_PATH, "install"], check=True)
+        except subprocess.CalledProcessError as install_error:
+            click.echo(f"Error: 'bun install' failed with exit code {install_error.returncode}.")
+    except FileNotFoundError:
+        click.echo("Error: 'bun' is not installed or not in your PATH.")
 
 
 def run_docker_compose_up(state, build, detach):

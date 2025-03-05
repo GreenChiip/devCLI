@@ -1,7 +1,7 @@
 import click, os
 from dotenv import load_dotenv
 from InquirerPy import inquirer
-from utils import open_in_vscode, run_npm_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
+from utils import open_in_vscode, run_npm_dev, isBun, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
 from alias import handle_add_alias, handle_remove_alias, handle_list_aliases, load_aliases
 from create import get_project_details, generate_project_json, create_project_files
 
@@ -10,26 +10,25 @@ BASE_PATH = os.getenv("BASE_PATH")
 
 @click.command("run", help="Run 'npm run dev' in the specified folder.")
 @click.argument('folder_name')
-@click.option("--alias", "-a", help="Use an alias instead of a folder name.", is_flag=True)
-@click.option("--code", "-c", help="Open VScode", is_flag=True)
-def run_dev(folder_name, alias, code):
-    target_dir = resolve_folder(folder_name, alias)
+def run_dev(folder_name):
+    target_dir = resolve_folder(folder_name)
     if not target_dir:
+        click.echo("No valid directory selected.")
         return
-
+    
     if not validate_package_json(target_dir):
         target_dir = select_dir_with_package_json(target_dir)
         if not target_dir:
-            click.echo("No valid directory with 'package.json' selected. Exiting.")
+            click.echo(f"Error: 'package.json' does not exist in the folder '{target_dir}'.")
             return
 
     change_directory(target_dir)
 
-    if code:
-        open_in_vscode()
-
-    run_npm_dev()
-
+    if isBun(target_dir):
+        click.echo("Detected 'bun.lock'. Running 'bun'...")
+        run_bun_dev()
+    else:
+        run_npm_dev()
 
 @click.command("alias", help="Add or remove an alias.")
 @click.argument("action", type=click.Choice(["add", "remove", "list"], case_sensitive=False))
