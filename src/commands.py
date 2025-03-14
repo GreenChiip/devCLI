@@ -46,10 +46,8 @@ def alias(action, alias_name, alias_for):
 
 @click.command("code", help="Opens the specified folder in VScode.")
 @click.argument('folder_name')
-@click.option("--alias", "-a", help="Use an alias instead of a folder name.", is_flag=True)
-def code(folder_name, alias):
-    # target_dir = os.path.join(base_path, folder_name)
-    target_dir = resolve_folder(folder_name, alias)
+def code(folder_name):
+    target_dir = resolve_folder(folder_name)
     if not target_dir:
         return
     
@@ -60,11 +58,10 @@ def code(folder_name, alias):
 @click.command("docker", help="Run docker-compose up in the specified folder.")
 @click.argument('folder_name')
 @click.argument('state', required=True, type=click.Choice(["up", "down"], case_sensitive=False))
-@click.option("--alias", "-a", help="Use an alias instead of a folder name.", is_flag=True)
 @click.option("--build", "-b", help="Build images before starting containers.", is_flag=True)
 @click.option("--detach", "-d", help="Run containers in the background.", is_flag=True)
-def docker(folder_name, state, alias, build, detach):
-    target_dir = resolve_folder(folder_name, alias)
+def docker(folder_name, state, build, detach):
+    target_dir = resolve_folder(folder_name)
     if not target_dir:
         return
 

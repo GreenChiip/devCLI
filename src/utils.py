@@ -86,7 +86,7 @@ def open_in_vscode():
         Open the current directory in Visual Studio Code.
     """
     try:
-        subprocess.run([VSCODE_PATH, "."], check=True)
+        subprocess.Popen([VSCODE_PATH, "."], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.DETACHED_PROCESS)
     except FileNotFoundError:
         click.echo("Error: Visual Studio Code is not installed or the path is incorrect.")
 
