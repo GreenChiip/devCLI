@@ -154,4 +154,44 @@ def run_docker_compose_up(state, build, detach):
     except subprocess.CalledProcessError as e:
         click.echo(f"Error: Command 'docker compose {state}' failed with exit code {e.returncode}.")
         
-        
+
+def is_bun(folder: str) -> bool:
+    return (
+        os.path.exists(os.path.join(folder, "bun.lockb")) or
+        os.path.exists(os.path.join(folder, "bun.lock")) or
+        os.path.exists(os.path.join(folder, ".bunfig.toml"))
+    )
+
+def is_npm(folder: str) -> bool:
+    return (
+        os.path.exists(os.path.join(folder, "package-lock.json")) or
+        os.path.exists(os.path.join(folder, "yarn.lock")) or
+        os.path.exists(os.path.join(folder, "pnpm-lock.yaml"))
+    )
+
+def is_python(folder: str) -> bool:
+    return (
+        os.path.exists(os.path.join(folder, "requirements.txt")) or
+        os.path.exists(os.path.join(folder, ".venv")) or
+        os.path.exists(os.path.join(folder, "pyproject.toml"))
+    )
+
+def is_docker(folder: str) -> bool:
+    return (
+        os.path.exists(os.path.join(folder, "Dockerfile")) or
+        os.path.exists(os.path.join(folder, "docker-compose.yml"))
+    )
+    
+PROJECT_DETECTORS = {
+        "BUN": is_bun,
+        "NPM": is_npm,
+        "PYTHON": is_python,
+        "DOCKER": is_docker,
+    }
+
+TAG_COLORS = {
+    "BUN": "bright_blue",
+    "NPM": "yellow",
+    "PYTHON": "green",
+    "DOCKER": "cyan",
+}

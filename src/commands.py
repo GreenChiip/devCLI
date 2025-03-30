@@ -1,7 +1,7 @@
 import click, os
 from dotenv import load_dotenv
 from InquirerPy import inquirer
-from utils import open_in_vscode, run_npm_dev, isBun, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
+from utils import open_in_vscode, run_npm_dev, is_bun, PROJECT_DETECTORS, TAG_COLORS, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
 from alias import handle_add_alias, handle_remove_alias, handle_list_aliases, load_aliases
 from create import get_project_details, generate_project_json, create_project_files
 
@@ -24,24 +24,34 @@ def run_dev(folder_name):
 
     change_directory(target_dir)
 
-    if isBun(target_dir):
+    if is_bun(target_dir):
         click.echo("Detected 'bun.lock'. Running 'bun'...")
         run_bun_dev()
     else:
         run_npm_dev()
 
 @click.command("alias", help="Add or remove an alias.")
-@click.argument("action", type=click.Choice(["add", "remove", "list"], case_sensitive=False))
+@click.argument("action", required=False)
 @click.argument("alias_name", required=False)
 @click.argument("alias_for", required=False)
 def alias(action, alias_name, alias_for):
     aliases = load_aliases()
+    if action is None:
+        handle_list_aliases(aliases)
+        return
+    
+    if action not in ["add", "remove"]:
+        click.echo("Error: Invalid action. Use 'add' or 'remove'.")
+        return
+        
     if action == "add":
         handle_add_alias(aliases, alias_name, alias_for)
-    elif action == "remove":
+        return
+    
+    if action == "remove":
         handle_remove_alias(aliases, alias_name)
-    elif action == "list":
-        handle_list_aliases(aliases)
+        return
+
 
 
 @click.command("code", help="Opens the specified folder in VScode.")
@@ -95,3 +105,50 @@ def init():
     create_project_files(project_details)
 
     click.echo(f"✅ Project '{project_details['name']}' initialized successfully!")
+
+
+@click.command("list", help="List all available folders.")
+def list_folders():
+    """
+    List all available folders in the BASE_PATH with detected project type tags.
+    """
+    folders = [
+        d for d in os.listdir(BASE_PATH)
+        if os.path.isdir(os.path.join(BASE_PATH, d))
+    ]
+
+    if not folders:
+        click.echo("No folders found.")
+        return
+
+    click.echo("Available folders:")
+    for folder in folders:
+        full_path = os.path.join(BASE_PATH, folder)
+        tags = [tag for tag, detector in PROJECT_DETECTORS.items() if detector(full_path)]
+
+        # Colorize tags
+        colored_tags = [
+            click.style(tag, fg=TAG_COLORS.get(tag, "white"))
+            for tag in tags
+        ]
+
+        # Align output nicely
+        folder_display = f"{folder:<30}"
+        if tags:
+            folder_display += f"[{', '.join(colored_tags)}]"
+
+        click.echo(f"  - {click.style(folder_display)}")
+        
+@click.command("help", help="Show help information.")
+def help():
+    """
+    Show help information for the CLI.
+    """
+    click.echo("Available commands:")
+    click.echo("  run <folder_name>  - Run 'npm run dev' in the specified folder.")
+    click.echo("  alias <action> <alias_name> <alias_for>  - Add or remove an alias.")
+    click.echo("  code <folder_name>  - Open the specified folder in VScode.")
+    click.echo("  docker <folder_name> <state> [--build] [--detach]  - Run docker-compose up/down.")
+    click.echo("  init  - Create a new project folder with a devCLI-project.json file.")
+    click.echo("  list  - List all available folders.")
+    click.echo("  help  - Show help information.")
