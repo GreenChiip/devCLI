@@ -1,6 +1,4 @@
-import os
-import click
-import subprocess
+import os, sys, click, subprocess
 from typing import List
 from InquirerPy import inquirer
 from dotenv import load_dotenv
@@ -81,14 +79,32 @@ def change_directory(target_dir):
     """
     os.chdir(target_dir)
 
+
 def open_in_vscode():
     """
-        Open the current directory in Visual Studio Code.
+    Open current directory in VS Code (or code-server) and detach from terminal.
     """
     try:
-        subprocess.Popen([VSCODE_PATH, "."], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.DETACHED_PROCESS)
+        kwargs = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+
+        # Add platform-specific options
+        if sys.platform.startswith("win"):
+            kwargs["creationflags"] = subprocess.DETACHED_PROCESS
+        elif sys.platform.startswith("linux") or sys.platform.startswith("darwin"):
+            # On Unix-like systems (Linux/macOS/iOS): run via shell in background
+            subprocess.Popen(f"{VSCODE_PATH} . >/dev/null 2>&1 &", shell=True)
+            return
+
+        # Default fallback (Windows)
+        subprocess.Popen([VSCODE_PATH, "."], **kwargs)
+
     except FileNotFoundError:
-        click.echo("Error: Visual Studio Code is not installed or the path is incorrect.")
+        print("Error: VS Code or code-server not found.")
+    except Exception as e:
+        print(f"Error: {e}")
 
 
 def run_npm_dev():
