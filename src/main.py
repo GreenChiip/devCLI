@@ -1,5 +1,5 @@
 import click
-from commands import run_dev, alias, code, docker, init, list_folders, update, help
+from commands import run_dev, alias, code, docker, init, list_folders, update, help, start
 
 
 @click.group(help="General commands")
@@ -15,6 +15,7 @@ cli.add_command(init)
 cli.add_command(list_folders)
 cli.add_command(help)
 cli.add_command(update)
+cli.add_command(start)
 
 
 if __name__ == "__main__":

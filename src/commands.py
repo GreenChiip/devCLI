@@ -2,11 +2,13 @@ import click, os
 from dotenv import load_dotenv
 from InquirerPy import inquirer
 from utils import updateRepo, open_in_vscode, run_npm_dev, is_bun, PROJECT_DETECTORS, TAG_COLORS, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
-from alias import handle_add_alias, handle_remove_alias, handle_list_aliases, load_aliases
+from conifg import handle_add_alias, handle_remove_alias, handle_list_aliases, load_config, save_config
 from create import get_project_details, generate_project_json, create_project_files
 
 load_dotenv()
 BASE_PATH = os.getenv("BASE_PATH")
+
+config = load_config()
 
 @click.command("run", help="Run 'npm run dev' in the specified folder.")
 @click.argument('folder_name')
@@ -35,7 +37,7 @@ def run_dev(folder_name):
 @click.argument("alias_name", required=False)
 @click.argument("alias_for", required=False)
 def alias(action, alias_name, alias_for):
-    aliases = load_aliases()
+    aliases = config.get("alias", {})
     if action is None:
         handle_list_aliases(aliases)
         return
@@ -45,18 +47,18 @@ def alias(action, alias_name, alias_for):
         return
         
     if action == "add":
-        handle_add_alias(aliases, alias_name, alias_for)
+        handle_add_alias(config, alias_name, alias_for)
         return
     
     if action == "remove":
-        handle_remove_alias(aliases, alias_name)
+        handle_remove_alias(config, alias_name)
         return
 
 
 
-@click.command("code", help="Opens the specified folder in VScode.")
-@click.argument('folder_name')
-def code(folder_name):
+@click.command("code", help="Opens the selected folder in VScode. (default: dev)")
+@click.argument('folder_name', required=True, type=str)
+def code(folder_name = "dev"):
     target_dir = resolve_folder(folder_name)
     if not target_dir:
         return
@@ -65,8 +67,8 @@ def code(folder_name):
     open_in_vscode()
     
 
-@click.command("docker", help="Run docker-compose up in the specified folder.")
-@click.argument('folder_name')
+@click.command("docker", help="Run 'docker-compose up' in the selected folder.")
+@click.argument('folder_name', required=True, type=str) 
 @click.argument('state', required=True, type=click.Choice(["up", "down"], case_sensitive=False))
 @click.option("--build", "-b", help="Build images before starting containers.", is_flag=True)
 @click.option("--detach", "-d", help="Run containers in the background.", is_flag=True)
@@ -79,11 +81,12 @@ def docker(folder_name, state, build, detach):
     run_docker_compose_up(state, build, detach)
 
 
-@click.command("init", help="Create a new project folder with a devCLI-project.json file.")
+@click.command("init", help="Create a new project folder with a devCLI-project.json file. (not implemented yet)")
 def init():
     """
     Initialize a new project with a devCLI-project.json file and prompt the user for details.
     """
+    return
     # Gather project details
     project_details = get_project_details()
 
@@ -95,7 +98,7 @@ def init():
     # Add folder to aliases if confirmed
     if inquirer.confirm(message="Do you want to add this folder to your aliases?").execute():
         alias_name = inquirer.text(message="Enter alias name:", default=project_details["name"]).execute()
-        aliases = load_aliases()
+        aliases = config.get("alias", {})
         if alias_name in aliases:
             click.echo(f"⚠️ Alias '{alias_name}' already exists.")
             return
@@ -140,18 +143,14 @@ def list_folders():
         click.echo(f"  - {click.style(folder_display)}")
 
 
-@click.command("update", help="Get the latest version of devCLI. From GitHub.")
+@click.command("update", help="Get the latest version of the projects git repo (default: dev).")
 @click.argument('folder_name', required=False)
 @click.option('--force', is_flag=True, help="Force update even if no changes detected.")
 @click.option('--no-pull', is_flag=True, help="Skip pulling changes from the repository.")
-def update(folder_name, force, no_pull):
+def update(folder_name = "dev", force = False , no_pull = False):
     """
     Update the devCLI to the latest version from GitHub.
     """
-    if folder_name is None:
-        folder_name = "dev"
-    
-
     if folder_name:
         target_dir = resolve_folder(folder_name)
         if not target_dir:
@@ -163,6 +162,41 @@ def update(folder_name, force, no_pull):
         click.echo("Update completed successfully!")
     else:
         click.echo("No updates available or an error occurred.")
+
+
+
+@click.command("start", help="Start the current default selected project.")
+@click.option('setProject', "--set", help="Set a project to start by default.")
+@click.option('code', '--code', is_flag=True, help="Open the project in VSCode.")
+def start(setProject = None, code = True):
+    """
+    Start the current selected project.
+    """
+    if setProject:
+        target_dir = resolve_folder(setProject)
+        if not target_dir:
+            click.echo("No valid directory selected.")
+            return
+        config["currentProject"] = setProject
+        save_config(config)
+        click.echo(f"Current project set to: {setProject}")
+        return
+
+    target_dir = resolve_folder(config["currentProject"])
+    change_directory(target_dir)
+
+    if not validate_package_json(target_dir):
+        open_in_vscode()
+        return
+    
+
+    if is_bun(target_dir):
+        click.echo("Detected 'bun.lock'. Running 'bun'...")
+        open_in_vscode()
+        run_bun_dev()
+    else:
+        open_in_vscode()
+        run_npm_dev()
 
 
 @click.command("help", help="Show help information.")

@@ -2,7 +2,7 @@ import os, sys, click, subprocess
 from typing import List
 from InquirerPy import inquirer
 from dotenv import load_dotenv
-from alias import load_aliases
+from conifg import load_config
 
 load_dotenv()
 BASE_PATH = os.getenv("BASE_PATH")
@@ -10,6 +10,8 @@ VSCODE_PATH = os.getenv("VSCODE_PATH")
 NPM_PATH = os.getenv("NPM_PATH")
 DOCKER_PATH = os.getenv("DOCKER_PATH")
 BUN_PATH = os.getenv("BUN_PATH")
+
+config = load_config()
 
 ## Fuction to get dirs in a path
 def get_dirs_in_path(path: str) -> List[str]:
@@ -51,7 +53,7 @@ def resolve_folder(folder_name):
     """
     Resolve the folder name using alias if applicable and validate existence.
     """
-    aliases = load_aliases()
+    aliases = config.get("alias", {})
     if folder_name in aliases:
         folder_name = aliases[folder_name]
     
@@ -183,18 +185,28 @@ def is_docker(folder: str) -> bool:
     )
 
 
-def updateRepo(force: bool = False, no_pull: bool = False):
+def updateRepo(force: bool, no_pull: bool) -> bool:
     """
         Update the repository by pulling the latest changes from the remote.
     """
-    if force:
-        subprocess.run(["git", "fetch", "--all"])
-        subprocess.run(["git", "reset", "--hard", "origin/main"])
-        return True
-    elif not no_pull:
-        subprocess.run(["git", "pull"])
-        return True
-    
+    try:
+        if force:
+            subprocess.run(["git", "fetch", "--all"])
+            subprocess.run(["git", "reset", "--hard", "origin/main"])
+            return True
+        elif not no_pull:
+            subprocess.run(["git", "pull"])
+            return True
+    except subprocess.CalledProcessError as e:
+        click.echo(f"Error: Command 'git pull' failed with exit code {e.returncode}.")
+        return False
+    except FileNotFoundError:
+        click.echo("Error: 'git' is not installed or not in your PATH.")
+        return False
+    except Exception as e:
+        click.echo(f"An unexpected error occurred: {e}")
+        return False
+
     return False
     
 
