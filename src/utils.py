@@ -181,7 +181,24 @@ def is_docker(folder: str) -> bool:
         os.path.exists(os.path.join(folder, "Dockerfile")) or
         os.path.exists(os.path.join(folder, "docker-compose.yml"))
     )
+
+
+def updateRepo(force: bool = False, no_pull: bool = False):
+    """
+        Update the repository by pulling the latest changes from the remote.
+    """
+    if force:
+        subprocess.run(["git", "fetch", "--all"])
+        subprocess.run(["git", "reset", "--hard", "origin/main"])
+        return True
+    elif not no_pull:
+        subprocess.run(["git", "pull"])
+        return True
     
+    return False
+    
+
+
 PROJECT_DETECTORS = {
         "BUN": is_bun,
         "NPM": is_npm,

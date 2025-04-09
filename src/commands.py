@@ -1,7 +1,7 @@
 import click, os
 from dotenv import load_dotenv
 from InquirerPy import inquirer
-from utils import open_in_vscode, run_npm_dev, is_bun, PROJECT_DETECTORS, TAG_COLORS, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
+from utils import updateRepo, open_in_vscode, run_npm_dev, is_bun, PROJECT_DETECTORS, TAG_COLORS, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
 from alias import handle_add_alias, handle_remove_alias, handle_list_aliases, load_aliases
 from create import get_project_details, generate_project_json, create_project_files
 
@@ -133,22 +133,70 @@ def list_folders():
         ]
 
         # Align output nicely
-        folder_display = f"{folder:<30}"
+        folder_display = f"{folder:<35}"
         if tags:
             folder_display += f"[{', '.join(colored_tags)}]"
 
         click.echo(f"  - {click.style(folder_display)}")
-        
+
+
+@click.command("update", help="Get the latest version of devCLI. From GitHub.")
+@click.argument('folder_name', required=False)
+@click.option('--force', is_flag=True, help="Force update even if no changes detected.")
+@click.option('--no-pull', is_flag=True, help="Skip pulling changes from the repository.")
+def update(folder_name, force, no_pull):
+    """
+    Update the devCLI to the latest version from GitHub.
+    """
+    if folder_name is None:
+        folder_name = "dev"
+    
+
+    if folder_name:
+        target_dir = resolve_folder(folder_name)
+        if not target_dir:
+            click.echo("No valid directory selected.")
+            return
+    
+    change_directory(target_dir)
+    if updateRepo(force, no_pull):
+        click.echo("Update completed successfully!")
+    else:
+        click.echo("No updates available or an error occurred.")
+
+
 @click.command("help", help="Show help information.")
-def help():
-    """
-    Show help information for the CLI.
-    """
-    click.echo("Available commands:")
-    click.echo("  run <folder_name>  - Run 'npm run dev' in the specified folder.")
-    click.echo("  alias <action> <alias_name> <alias_for>  - Add or remove an alias.")
-    click.echo("  code <folder_name>  - Open the specified folder in VScode.")
-    click.echo("  docker <folder_name> <state> [--build] [--detach]  - Run docker-compose up/down.")
-    click.echo("  init  - Create a new project folder with a devCLI-project.json file.")
-    click.echo("  list  - List all available folders.")
-    click.echo("  help  - Show help information.")
+@click.argument('command', required=False)
+def help(command = None):
+    if command:
+        commands = {
+            "run": run_dev,
+            "alias": alias,
+            "code": code,
+            "docker": docker,
+            "init": init,
+            "list": list_folders,
+            "update": update,
+            "help": help
+        }
+
+        if command in commands:
+            click.echo(commands[command].get_help(click.Context(commands[command])))
+            click.echo("")
+        else:
+            # print "Error" in a red color
+            click.secho(f"Error: Command '{command}' not found.", fg="red")
+            click.echo()
+    else:
+        click.echo("")
+        click.echo("devCLI - Command Line Interface")
+        click.echo("Available commands:")
+        click.echo("   run <folder_name>  - Run 'npm run dev' in the specified folder.")
+        click.echo("   alias <action> <alias_name> <alias_for>  - Add or remove an alias.")
+        click.echo("   code <folder_name>  - Open the specified folder in VScode.")
+        click.echo("   docker <folder_name> <state> [--build] [--detach]  - Run docker-compose up/down.")
+        click.echo("   init  - Create a new project folder with a devCLI-project.json file.")
+        click.echo("   list  - List all available folders.")
+        click.echo("   update [folder_name] [--force] [--no-pull]  - Update devCLI to the latest version.")
+        click.echo("   help  - Show help information.")
+        click.echo("")
