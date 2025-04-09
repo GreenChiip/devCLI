@@ -211,6 +211,7 @@ def help(command = None):
             "init": init,
             "list": list_folders,
             "update": update,
+            "start": start,
             "help": help
         }
 
