@@ -3,18 +3,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 CONFIG_PATH = os.getenv("CONFIG_PATH")
+ALIAS_PATH = os.getenv("ALIAS_PATH")
 BASE_PATH = os.getenv("BASE_PATH")
 
 
-def load_config():
+def load_config(path="config"):
     """
     Load the configuration from the JSON file.
     """
-    if not os.path.exists(CONFIG_PATH):
-        click.echo(f"Config file not found at {CONFIG_PATH}.")
+    path = CONFIG_PATH if path=="config" else ALIAS_PATH
+    if not os.path.exists(path):
+        click.echo(f"Config file not found at {path}.")
         return {}
 
-    with open(CONFIG_PATH, "r") as f:
+    with open(path, "r") as f:
         try:
             config = json.load(f)
             return config
@@ -22,10 +24,11 @@ def load_config():
             click.echo(f"Error loading config: {e}")
             return {}
         
-def save_config(config):
+def save_config(config, path="config"):
     """
     Save the configuration to the JSON file.
     """
+    path = CONFIG_PATH if path=="config" else ALIAS_PATH
     with open(CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=4)
 
@@ -43,7 +46,7 @@ def handle_list_aliases(aliases):
         click.echo(f"  {alias_name} -> {alias_for}")
 
 
-def handle_remove_alias(config, alias_name):
+def handle_remove_alias(alias, alias_name):
     """
     Remove an existing alias from the aliases file.
     """
@@ -51,16 +54,16 @@ def handle_remove_alias(config, alias_name):
         click.echo("Error: 'alias_name' is required to remove an alias.")
         return
 
-    if alias_name not in config["alias"]:
+    if alias_name not in "alias":
         click.echo(f"Error: Alias '{alias_name}' does not exist.")
         return
 
-    del config["alias"][alias_name]
-    save_config(config)
+    del alias["alias_name"]
+    save_config(alias, path="alias")
     click.echo(f"Alias '{alias_name}' removed.")
 
 
-def handle_add_alias(config, alias_name, alias_for):
+def handle_add_alias(alias, alias_name, alias_for):
     """
     Add a new alias to the aliases file.
     """
@@ -70,10 +73,10 @@ def handle_add_alias(config, alias_name, alias_for):
         click.echo("Example: alias add myfolder Projects\myfolder\n\n")
         return
 
-    if alias_name in config["alias"]:
+    if alias_name in alias:
         click.echo(f"Error: Alias '{alias_name}' already exists.")
         return
 
-    config["alias"][alias_name] = alias_for
-    save_config(config)
+    alias[alias_name] = alias_for
+    save_config(alias, path="alias")
     click.echo(f"Alias '{alias_name}' added for '{alias_for}'.")

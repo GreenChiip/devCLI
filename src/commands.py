@@ -9,6 +9,7 @@ load_dotenv()
 BASE_PATH = os.getenv("BASE_PATH")
 
 config = load_config()
+aliases = load_config("alias")
 
 @click.command("run", help="Run 'npm run dev' in the specified folder.")
 @click.argument('folder_name')
@@ -37,7 +38,6 @@ def run_dev(folder_name):
 @click.argument("alias_name", required=False)
 @click.argument("alias_for", required=False)
 def alias(action, alias_name, alias_for):
-    aliases = config.get("alias", {})
     if action is None:
         handle_list_aliases(aliases)
         return
@@ -47,11 +47,11 @@ def alias(action, alias_name, alias_for):
         return
         
     if action == "add":
-        handle_add_alias(config, alias_name, alias_for)
+        handle_add_alias(aliases, alias_name, alias_for)
         return
     
     if action == "remove":
-        handle_remove_alias(config, alias_name)
+        handle_remove_alias(aliases, alias_name)
         return
 
 
@@ -86,6 +86,7 @@ def init():
     """
     Initialize a new project with a devCLI-project.json file and prompt the user for details.
     """
+    click.echo("Not implemented yet.")
     return
     # Gather project details
     project_details = get_project_details()

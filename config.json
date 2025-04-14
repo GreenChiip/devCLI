@@ -2,12 +2,5 @@
     "name": "devCLI",
     "version": "0.3.0",
     "description": "A CLI for running and managing projects",
-    "currentProject": "menju",
-    "alias": {
-        "tyro": "TyRo-Bridge\\webapp",
-        "menju": "menju\\Menju",
-        "tailscale": "Tailscale-ACLs",
-        "racks": "tyroraks.com",
-        "dev": "devCLI"
-    }
+    "currentProject": "menju"
 }
