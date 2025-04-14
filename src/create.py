@@ -11,6 +11,7 @@ load_dotenv()
 NPX_PATH = os.getenv("NPX_PATH")
 
 config = load_config()
+aliases = load_config("alias")
 
 def get_project_details():
     """
@@ -74,7 +75,7 @@ def create_node_files(project_details):
     """
     Generate files for a Node.js project based on the selected framework.
     """
-    aliases = config.get("alias", {})
+    
     subprocess.run([NPX_PATH, "create-next-app@latest", "app", "--yes"], check=True)
     handle_add_alias(aliases, project_details['name'], f"{project_details['name']}/app")
     click.echo("🦄 NextJS project created.")

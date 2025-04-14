@@ -99,7 +99,7 @@ def init():
     # Add folder to aliases if confirmed
     if inquirer.confirm(message="Do you want to add this folder to your aliases?").execute():
         alias_name = inquirer.text(message="Enter alias name:", default=project_details["name"]).execute()
-        aliases = config.get("alias", {})
+        aliases
         if alias_name in aliases:
             click.echo(f"⚠️ Alias '{alias_name}' already exists.")
             return
@@ -145,18 +145,17 @@ def list_folders():
 
 
 @click.command("update", help="Get the latest version of the projects git repo (default: dev).")
-@click.argument('folder_name', required=False)
+@click.argument('folder_name', required=False, default="dev")
 @click.option('--force', is_flag=True, help="Force update even if no changes detected.")
 @click.option('--no-pull', is_flag=True, help="Skip pulling changes from the repository.")
-def update(folder_name = "dev", force = False , no_pull = False):
+def update(folder_name, force = False , no_pull = False):
     """
     Update the devCLI to the latest version from GitHub.
     """
-    if folder_name:
-        target_dir = resolve_folder(folder_name)
-        if not target_dir:
-            click.echo("No valid directory selected.")
-            return
+    target_dir = resolve_folder(folder_name)
+    if not target_dir:
+        click.echo("No valid directory selected.")
+        return
     
     change_directory(target_dir)
     if updateRepo(force, no_pull):
@@ -167,7 +166,7 @@ def update(folder_name = "dev", force = False , no_pull = False):
 
 
 @click.command("start", help="Start the current default selected project.")
-@click.option('setProject', "--set", help="Set a project to start by default.")
+@click.option('setProject', "--set", help="Set a project to start by default.", default=None)
 @click.option('code', '--code', is_flag=True, help="Open the project in VSCode.")
 def start(setProject = None, code = True):
     """
