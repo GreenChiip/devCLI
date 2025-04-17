@@ -8,7 +8,9 @@ This project provides a CLI tool to manage and streamline development workflows.
 - 🛠️ Manage aliases (`add`, `remove`, `list`) stored in a JSON file.
 - ✨ Open projects in Visual Studio Code.
 - 🔥 Automatically run `npm run dev`.
-    - 📂 Looks after `package.json` in selected folder.
+    - 📂 Looks after `package.json` and `bun.lock` in selected folder.
+- ⬆️ Update managed repos.
+- 🪽 Fast method to start the current set project. 
 - 🐳 **Docker Support**: Includes a fast method to boot any `docker compose` projects.
 
 
