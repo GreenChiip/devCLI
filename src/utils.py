@@ -12,6 +12,7 @@ DOCKER_PATH = os.getenv("DOCKER_PATH")
 BUN_PATH = os.getenv("BUN_PATH")
 
 config = load_config()
+aliases = load_config("alias")
 
 ## Fuction to get dirs in a path
 def get_dirs_in_path(path: str) -> List[str]:
@@ -53,11 +54,13 @@ def resolve_folder(folder_name):
     """
     Resolve the folder name using alias if applicable and validate existence.
     """
-    aliases = config.get("alias", {})
     if folder_name in aliases:
         folder_name = aliases[folder_name]
     
+    
     target_dir = os.path.join(BASE_PATH, folder_name)
+    print(f"Target dir: {target_dir}")
+    
     if not os.path.exists(target_dir):
         return None
     

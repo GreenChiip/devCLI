@@ -7,11 +7,11 @@ ALIAS_PATH = os.getenv("ALIAS_PATH")
 BASE_PATH = os.getenv("BASE_PATH")
 
 
-def load_config(path="config"):
+def load_config(pathC = "config"):
     """
     Load the configuration from the JSON file.
     """
-    path = CONFIG_PATH if path=="config" else ALIAS_PATH
+    path = CONFIG_PATH if pathC == "config" else ALIAS_PATH
     if not os.path.exists(path):
         click.echo(f"Config file not found at {path}.")
         return {}
@@ -24,12 +24,12 @@ def load_config(path="config"):
             click.echo(f"Error loading config: {e}")
             return {}
         
-def save_config(config, path="config"):
+def save_config(config, pathC="config"):
     """
     Save the configuration to the JSON file.
     """
-    path = CONFIG_PATH if path=="config" else ALIAS_PATH
-    with open(CONFIG_PATH, "w") as f:
+    path = CONFIG_PATH if pathC == "config" else ALIAS_PATH
+    with open(path, "w") as f:
         json.dump(config, f, indent=4)
 
 
@@ -59,7 +59,7 @@ def handle_remove_alias(alias, alias_name):
         return
 
     del alias["alias_name"]
-    save_config(alias, path="alias")
+    save_config(alias, "alias")
     click.echo(f"Alias '{alias_name}' removed.")
 
 
@@ -76,7 +76,12 @@ def handle_add_alias(alias, alias_name, alias_for):
     if alias_name in alias:
         click.echo(f"Error: Alias '{alias_name}' already exists.")
         return
+    
+    target_dir = os.path.join(BASE_PATH, alias_for)
+    if not os.path.exists(target_dir):
+        click.echo(f"Error: Target directory '{target_dir}' does not exist.")
+        return
 
     alias[alias_name] = alias_for
-    save_config(alias, path="alias")
+    save_config(alias, "alias")
     click.echo(f"Alias '{alias_name}' added for '{alias_for}'.")
