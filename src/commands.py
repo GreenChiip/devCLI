@@ -174,17 +174,6 @@ def update(folder_name, force = False , no_pull = False):
         
     else:
         click.echo("No updates available or an error occurred.")
-        if validate_package_json(target_dir):
-            if inquirer.confirm(message="Do you want to install packages?", default=True).execute():
-                if is_bun(target_dir):
-                    click.echo("Detected 'bun.lock'. Running 'bun install'...")
-                    run_bun_dev()
-                else:
-                    click.echo("Running 'npm install'...")
-                    run_npm_dev()
-        else:
-            click.echo("No package.json found. Skipping npm install.")
-
 
 
 @click.command("start", help="Start the current default selected project.")
