@@ -1,7 +1,7 @@
 import click, os
 from dotenv import load_dotenv
 from InquirerPy import inquirer
-from utils import updateRepo, open_in_vscode, run_npm_dev, is_bun, PROJECT_DETECTORS, TAG_COLORS, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
+from utils import run_install_package, updateRepo, open_in_vscode, run_npm_dev, is_bun, PROJECT_DETECTORS, TAG_COLORS, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
 from conifg import handle_add_alias, handle_remove_alias, handle_list_aliases, load_config, save_config
 from create import get_project_details, generate_project_json, create_project_files
 
@@ -160,8 +160,30 @@ def update(folder_name, force = False , no_pull = False):
     change_directory(target_dir)
     if updateRepo(force, no_pull):
         click.echo("Update completed successfully!")
+        # Check if the project has a package.json file and ask if to run npm install if it does
+        if validate_package_json(target_dir):
+            if inquirer.confirm(message="Do you want to install packages?", default=True).execute():
+                if is_bun(target_dir):
+                    click.echo("Detected 'bun.lock'. Running 'bun install'...")
+                    run_install_package("bun")
+                else:
+                    click.echo("Running 'npm install'...")
+                    run_install_package("npm")
+        else:
+            click.echo("No package.json found. Skipping npm install.")
+        
     else:
         click.echo("No updates available or an error occurred.")
+        if validate_package_json(target_dir):
+            if inquirer.confirm(message="Do you want to install packages?", default=True).execute():
+                if is_bun(target_dir):
+                    click.echo("Detected 'bun.lock'. Running 'bun install'...")
+                    run_bun_dev()
+                else:
+                    click.echo("Running 'npm install'...")
+                    run_npm_dev()
+        else:
+            click.echo("No package.json found. Skipping npm install.")
 
 
 

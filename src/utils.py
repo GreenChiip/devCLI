@@ -213,6 +213,22 @@ def updateRepo(force: bool, no_pull: bool) -> bool:
     return False
     
 
+def run_install_package(package_manager: str):
+    """
+        Run the package manager's install command.
+    """
+    try:
+        if package_manager == "npm":
+            subprocess.run([NPM_PATH, "install"], check=True)
+        elif package_manager == "bun":
+            subprocess.run([BUN_PATH, "install"], check=True)
+        else:
+            click.echo(f"Error: Unsupported package manager '{package_manager}'.")
+    except subprocess.CalledProcessError as e:
+        click.echo(f"Error: Command '{package_manager} install' failed with exit code {e.returncode}.")
+    except FileNotFoundError:
+        click.echo(f"Error: '{package_manager}' is not installed or not in your PATH.")
+
 
 PROJECT_DETECTORS = {
         "BUN": is_bun,
