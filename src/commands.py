@@ -210,6 +210,22 @@ def start(setProject = None, code = True):
         run_npm_dev()
 
 
+@click.command("cd", help="Change directory to the specified folder.")
+@click.argument('folder_name', required=False, type=str, default=None)
+def cd(folder_name):
+   if folder_name == None:
+        target_dir = resolve_folder(config["currentProject"])
+        change_directory(target_dir)
+        click.echo(f"Changed directory to: {target_dir}")
+   else:
+        target_dir = resolve_folder(folder_name)
+        if not target_dir:
+            click.echo("No valid directory selected.")
+            return
+        change_directory(target_dir)
+        click.echo(f"Changed directory to: {target_dir}")
+       
+
 @click.command("help", help="Show help information.")
 @click.argument('command', required=False)
 def help(command = None):
@@ -231,7 +247,7 @@ def help(command = None):
             click.echo("")
         else:
             # print "Error" in a red color
-            click.secho(f"Error: Command '{command}' not found.", fg="red")
+            click.echo(f"Error: Command '{command}' not found.", fg="red")
             click.echo()
     else:
         click.echo("")
