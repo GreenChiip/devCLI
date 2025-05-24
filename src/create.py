@@ -1,12 +1,19 @@
-import click, os, json, subprocess, logging
+import click, os, json, subprocess, logging, shutil # Added shutil
 from datetime import datetime
 from InquirerPy import inquirer
 from dotenv import load_dotenv
 
-from config import handle_add_alias, load_config # handle_add_alias uses logging
-from utils import resolve_folder # resolve_folder uses logging
+from config import handle_add_alias, load_config
+from utils import resolve_folder
 
 logger = logging.getLogger(__name__)
+
+# Determine CLI_ROOT_DIR, assuming this file is in CLI_ROOT_DIR/src/create.py
+CLI_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+logger.debug(f"CLI_ROOT_DIR determined as: {CLI_ROOT_DIR}")
+
+load_dotenv() 
+BASE_PATH = os.getenv("BASE_PATH")
 
 
 load_dotenv()
@@ -19,41 +26,85 @@ def get_project_details():
     """
     Prompt the user for project details and return them as a dictionary.
     """
-    project_name = inquirer.text(message=f"Enter the project name:").execute()
+    project_name_input = inquirer.text(message="Enter the project name:").execute()
+    if not project_name_input.strip():
+        logger.error("Project name cannot be empty.")
+        click.echo("❌ Project name cannot be empty.")
+        return {} # Or None
 
-    # resolve_folder already logs if verbose, so direct logging here might be redundant
-    # unless we want to ensure it's always logged regardless of resolve_folder's internal logging.
-    # For now, let's assume resolve_folder's logging is sufficient for its actions.
-    target_dir = resolve_folder(project_name) # Assuming resolve_folder now takes only one arg or handles default
-    if target_dir:
-        original_project_name = project_name
-        project_name = f"{project_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-        logger.warning(f"Folder '{original_project_name}' already exists. Changed name to '{project_name}' to avoid conflicts.")
-        click.echo(f"⚠️ Folder '{original_project_name}' already exists.") # User facing
-        click.echo(f"⚠️ Changed name to '{project_name}' to avoid conflicts.") # User facing
+    # Project name uniqueness check (folder existence)
+    # Assuming BASE_PATH is loaded correctly
+    if not BASE_PATH:
+        logger.error("BASE_PATH is not set. Cannot check for existing project directories.")
+        click.echo("❌ Error: BASE_PATH is not configured. Please set it in your .env file for project creation.")
+        return {}
+
+    final_project_name = project_name_input
+    # Use a simplified check here directly, or rely on os.makedirs in commands.py to fail if dir exists
+    # For a better user experience, checking here is good.
+    # resolve_folder might be too heavy if it does more than just path construction and check.
+    # Let's do a direct check for the folder based on input name.
+    prospective_path = os.path.join(BASE_PATH, project_name_input)
+    if os.path.exists(prospective_path):
+        logger.warning(f"Directory '{project_name_input}' already exists at {prospective_path}.")
+        current_time = datetime.now().strftime('%Y%m%d%H%M%S')
+        final_project_name = f"{project_name_input}-{current_time}"
+        click.echo(f"⚠️ Folder '{project_name_input}' already exists. Name changed to '{final_project_name}'.")
+        logger.info(f"Project name changed to '{final_project_name}' due to existing directory.")
+
 
     project_description = inquirer.text(message="Enter the project description:", default="A new project").execute()
-    project_author = inquirer.text(message="Enter the author name:", default="Kai Stenbro").execute()
-    project_type = inquirer.select(
+    project_author = inquirer.text(message="Enter the author name:", default="Your Name").execute() # Changed default
+
+    # Load Project Types from config.json
+    cli_config = load_config() # Loads main config.json
+    if not cli_config:
+        logger.error("Failed to load CLI configuration (config.json). Cannot list project types.")
+        click.echo("❌ Error: Could not load CLI configuration.")
+        return {} 
+        
+    project_types_config = cli_config.get("initialized_commands", {})
+    if not project_types_config:
+        logger.error("No project types defined in config.json under 'initialized_commands'. Cannot proceed.")
+        click.echo("❌ Error: No project types found in CLI configuration.")
+        return {}
+
+    # Prepare Choices for InquirerPy
+    choices = [
+        {"name": details.get("name", key), "value": key}
+        for key, details in project_types_config.items() if isinstance(details, dict) # ensure details is a dict
+    ]
+    if not choices:
+        logger.error("No valid choices could be prepared from 'initialized_commands' in config.json.")
+        click.echo("❌ Error: No project types available to choose from.")
+        return {}
+
+    # Prompt for Project Type
+    chosen_project_type_key = inquirer.select(
         message="Select project type:",
-        choices=["node", "python"],
-        default="node"
+        choices=choices,
+        default=choices[0]["value"] if choices else None
+    ).execute()
+    
+    selected_config = project_types_config.get(chosen_project_type_key)
+    if not selected_config:
+        logger.error(f"Configuration for selected project type key '{chosen_project_type_key}' not found.")
+        click.echo("❌ Error: Selected project type configuration is missing.")
+        return {}
+
+    # Prompt for Docker Usage
+    use_docker = inquirer.confirm(
+        message="Do you want to use Docker for this project environment?",
+        default=selected_config.get("defaultUseCompose", False) # Use default from config if available
     ).execute()
 
-    if project_type == "node":
-        node_framework = inquirer.select(
-            message="Select framework:",
-            choices=["NextJS-15", "NextJS-14"],
-            default="NextJS-15"
-        ).execute()
-        project_name = f"{project_name}-{node_framework}"
-
     return {
-        "name": project_name,
+        "name": final_project_name, # Use the potentially modified unique name
         "description": project_description,
         "author": project_author,
-        "type": project_type,
-        "framework": node_framework if project_type == "node" else None
+        "chosen_project_type_key": chosen_project_type_key,
+        "project_type_config": selected_config, # The actual config dict for the chosen type
+        "use_docker": use_docker
     }
 
 
@@ -72,113 +123,134 @@ def generate_project_json(project_details):
         }
     }
 
-    project_json_path = os.path.join(project_details["name"], "devCLI-project.json")
-    logger.debug(f"Generating devCLI-project.json at: {project_json_path}")
-    with open(project_json_path, "w") as f:
-        json.dump(project_json, f, indent=4)
-    logger.info(f"Created devCLI-project.json in {project_details['name']}")
-    click.echo(f"📄 Created devCLI-project.json in {project_details['name']}") # User facing
+    if not project_details or not project_details.get("name") or not project_details.get("project_type_config"):
+        logger.error("generate_project_json called with incomplete project_details.")
+        return
 
+    project_name = project_details["name"]
+    project_config = project_details["project_type_config"]
+    use_docker_choice = project_details.get("use_docker", False)
 
-def create_node_files(project_name_arg): # Changed from project_details to project_name_arg
-    """
-    Generate files for a Node.js project based on the selected framework.
-    """
-    logger.info(f"Creating Node.js files for project: {project_name_arg}")
-    # Assuming project_name_arg is just the name string.
-    # We might need the full project_details if other parts are used.
-    # For now, let's assume NPX_PATH is defined and works.
+    # Determine startup command
+    startup_command = None
+    if use_docker_choice:
+        startup_command = project_config.get("dockerStartupCommand")
+    else:
+        startup_command = project_config.get("localStartupCommand")
     
-    # The structure of project_details['name'] was used before, so if project_name_arg is different,
-    # this might need adjustment. Assuming project_name_arg is the folder name.
-    target_app_path = os.path.join(project_name_arg, "app") # Define where create-next-app should run
-    os.makedirs(target_app_path, exist_ok=True) # Ensure the base project folder exists
+    if not startup_command:
+        logger.warning(f"No startup command found for project '{project_name}' (Docker choice: {use_docker_choice}).")
 
+    # Determine useCompose
+    docker_compose_path_template = project_config.get("dockerComposePath")
+    default_use_compose_from_config = project_config.get("defaultUseCompose", False)
+    # useCompose is true if user chose Docker, a docker-compose path is defined, AND the project type defaults to using compose
+    # This interpretation means even if a compose file *could* be used, if defaultUseCompose is false, this flag is false.
+    # An alternative interpretation could be: use_docker AND docker_compose_path_template exists.
+    # Using the prompt's specified logic:
+    actual_use_compose = bool(use_docker_choice and docker_compose_path_template and default_use_compose_from_config)
+    logger.debug(f"Determined useCompose for {project_name}: {actual_use_compose} (use_docker_choice: {use_docker_choice}, docker_compose_path_template: {docker_compose_path_template}, default_use_compose_from_config: {default_use_compose_from_config})")
+
+    project_json_data = {
+        "name": project_name,
+        "version": "0.1.0", # Default version
+        "description": project_details.get("description", ""),
+        "author": project_details.get("author", ""),
+        "project_type_key": project_details.get("chosen_project_type_key"),
+        "project_type_name": project_config.get("name"),
+        "use_docker_preference": use_docker_choice, # User's direct choice for Docker
+        "useCompose": actual_use_compose, # Specific logic as per requirements
+        "startup": startup_command,
+        # Store template paths for reference, only if Docker is chosen by user
+        "dockerfile_template": project_config.get("dockerfilePath") if use_docker_choice else None,
+        "docker_compose_template": docker_compose_path_template if use_docker_choice else None,
+    }
+    
+    project_json_target_path = os.path.join(BASE_PATH, project_name, "devCLI-project.json")
+    logger.debug(f"Generating devCLI-project.json at: {project_json_target_path} with data: {project_json_data}")
+    
     try:
-        # Create the Next.js app inside the 'app' subdirectory of the project folder
-        subprocess.run([NPX_PATH, "create-next-app@latest", target_app_path, "--typescript", "--eslint", "--tailwind", "--src-dir", "--app", "--import-alias", "@/*", "--yes"], check=True, cwd=project_name_arg)
-        logger.info(f"Successfully ran create-next-app in {target_app_path}")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error during npx create-next-app for {project_name_arg}: {e}")
-        click.echo(f"❌ Error creating Next.js project: {e}") # User facing
-        return # Stop if create-next-app failed
+        with open(project_json_target_path, "w") as f:
+            json.dump(project_json_data, f, indent=4)
+        logger.info(f"Created devCLI-project.json in {project_name}")
+        click.echo(f"📄 Created devCLI-project.json in {project_name}")
+    except IOError as e:
+        logger.error(f"Failed to write devCLI-project.json for {project_name}: {e}")
+        click.echo(f"❌ Error writing devCLI-project.json: {e}")
 
-    # The alias should point to the project directory, not the 'app' subdirectory directly for dev purposes.
-    # So if project_name_arg is "my-next-project-NextJS-15", alias should be for "my-next-project-NextJS-15"
-    # and the path it points to should be "my-next-project-NextJS-15".
-    # handle_add_alias expects the alias name and the relative path from BASE_PATH.
-    # If project_name_arg is already the correct relative path, then it's fine.
-    handle_add_alias(aliases, project_name_arg, project_name_arg) # Alias name and folder name are the same
-    logger.info(f"Alias '{project_name_arg}' added for project.")
-    click.echo(f"🦄 NextJS project '{project_name_arg}' created.") # User facing
+
+def create_project_structure_from_command(project_details): # Renamed from create_node_files
+    project_name = project_details.get("name")
+    project_config = project_details.get("project_type_config")
+    init_command_template = project_config.get("initCommand")
+
+    if not all([project_name, project_config, init_command_template, BASE_PATH]): # Ensure BASE_PATH is also available
+        logger.error("create_project_structure_from_command called with incomplete details or missing BASE_PATH.")
+        click.echo("❌ Error: Cannot create project structure due to missing configuration or BASE_PATH.")
+        return
+
+    logger.info(f"Creating project structure for '{project_name}' using type '{project_details.get('chosen_project_type_key')}'.")
+    project_root_path = os.path.join(BASE_PATH, project_name) # This is project_details['path'] equivalent
     
+    init_command = init_command_template
+    logger.info(f"Executing initialization command in {project_root_path}: {init_command}")
+    
+    try:
+        if ".venv/bin/activate" in init_command:
+            full_command = f"bash -c 'cd \"{project_root_path}\" && {init_command}'"
+            logger.debug(f"Executing wrapped venv command: {full_command}")
+            process = subprocess.run(full_command, shell=True, check=True, capture_output=True, text=True)
+        else:
+            process = subprocess.run(init_command, shell=True, check=True, capture_output=True, text=True, cwd=project_root_path)
 
-def create_python_files(project_name_arg): # Changed from project_details to project_name_arg
-    """
-    Generate files for a Python project, including Docker configuration.
-    """
-    logger.info(f"Creating Python files for project: {project_name_arg}")
-    main_py_path = os.path.join(project_name_arg, "main.py")
-    dockerfile_path = os.path.join(project_name_arg, "Dockerfile")
-    docker_compose_path = os.path.join(project_name_arg, "docker-compose.yml")
+        logger.info(f"Initialization command stdout for '{project_name}':\n{process.stdout}")
+        if process.stderr:
+            logger.info(f"Initialization command stderr for '{project_name}':\n{process.stderr}")
+        click.echo(f"✅ Project files for '{project_name}' initialized successfully using command.")
 
-    logger.debug(f"Creating main.py at {main_py_path}")
-    open(main_py_path, "w").close()
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error during project files initialization for '{project_name}': {e.cmd}\nStdout: {e.stdout}\nStderr: {e.stderr}")
+        click.echo(f"❌ Error initializing project files for '{project_name}'. Check logs for details.")
+        return # Stop if init command fails
 
-    dockerfile_content = (
-        "FROM python:3.9-slim\n"
-        "WORKDIR /app\n"
-        "COPY . .\n"
-        "CMD [\"python\", \"main.py\"]"
-    )
-    logger.debug(f"Creating Dockerfile at {dockerfile_path} with content:\n{dockerfile_content}")
-    with open(dockerfile_path, "w") as f:
-        f.write(dockerfile_content)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during project files initialization for '{project_name}': {e}")
+        click.echo(f"❌ An unexpected error occurred. Check logs for details.")
+        return # Stop on other errors too
 
-    docker_compose_content = (
-        "version: '3.9'\n"
-        "services:\n"
-        "  app:\n"
-        "    build: .\n"
-        "    volumes:\n"
-        "      - .:/app\n"
-        "    command: python main.py"
-    )
-    logger.debug(f"Creating docker-compose.yml at {docker_compose_path} with content:\n{docker_compose_content}")
-    with open(docker_compose_path, "w") as f:
-        f.write(docker_compose_content)
+    # Docker file copying logic, executed after initCommand
+    if project_details.get("use_docker"):
+        logger.debug(f"Attempting to copy Docker files for '{project_name}'. CLI_ROOT_DIR: {CLI_ROOT_DIR}")
+        dockerfile_template_rel_path = project_config.get("dockerfilePath")
+        docker_compose_template_rel_path = project_config.get("dockerComposePath")
 
-    logger.info(f"Python project files and Docker configuration created for {project_name_arg}.")
-    click.echo(f"🐍 Python project '{project_name_arg}' files and Docker configuration created.") # User facing
-
+        if dockerfile_template_rel_path:
+            dockerfile_template_abs_path = os.path.join(CLI_ROOT_DIR, dockerfile_template_rel_path)
+            target_dockerfile_path = os.path.join(project_root_path, 'Dockerfile') # Standard name
+            if os.path.exists(dockerfile_template_abs_path):
+                try:
+                    shutil.copy(dockerfile_template_abs_path, target_dockerfile_path)
+                    logger.info(f"Copied Dockerfile from {dockerfile_template_abs_path} to {target_dockerfile_path}")
+                except Exception as e:
+                    logger.error(f"Error copying Dockerfile from {dockerfile_template_abs_path} to {target_dockerfile_path}: {e}")
+            else:
+                logger.warning(f"Dockerfile template not found at {dockerfile_template_abs_path}")
+        
+        if docker_compose_template_rel_path:
+            compose_template_abs_path = os.path.join(CLI_ROOT_DIR, docker_compose_template_rel_path)
+            target_compose_path = os.path.join(project_root_path, 'docker-compose.yml') # Standard name
+            if os.path.exists(compose_template_abs_path):
+                try:
+                    shutil.copy(compose_template_abs_path, target_compose_path)
+                    logger.info(f"Copied docker-compose.yml from {compose_template_abs_path} to {target_compose_path}")
+                except Exception as e:
+                    logger.error(f"Error copying docker-compose.yml from {compose_template_abs_path} to {target_compose_path}: {e}")
+            else:
+                logger.warning(f"docker-compose.yml template not found at {compose_template_abs_path}")
 
 
 def create_project_files(project_details):
-    """
-    Create the appropriate files for the selected project type.
-    """
-    logger.debug(f"Creating project files for project: {project_details['name']}, type: {project_details['type']}")
-    project_file_generators = {
-        "node": create_node_files,
-        "python": create_python_files
-    }
-
-    project_type = project_details["type"]
-    project_name = project_details["name"] # This is the actual folder name
-
-    if project_type in project_file_generators:
-        # Before calling, ensure the main project directory exists
-        # Base path for projects should come from config or be well-defined
-        # Assuming BASE_PATH is imported or accessible globally for project creation path
-        # project_base_creation_path = BASE_PATH 
-        # full_project_path = os.path.join(project_base_creation_path, project_name)
-        # os.makedirs(full_project_path, exist_ok=True)
-        # logger.debug(f"Ensured base project directory exists: {full_project_path}")
-        
-        # The called functions (create_node_files, create_python_files)
-        # will now create files inside this project_name folder.
-        project_file_generators[project_type](project_name)
-    else:
-        logger.error(f"Unsupported project type: {project_type}")
-        click.echo(f"⚠️ Unsupported project type: {project_type}") # User facing
+    # CWD is expected to be BASE_PATH when this is called from commands.py's init.
+    # The project directory (project_details["name"]) itself is created in commands.py's init.
+    create_project_structure_from_command(project_details)
 
