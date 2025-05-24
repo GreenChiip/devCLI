@@ -1,10 +1,14 @@
-import os, sys, click, subprocess
+import os, sys, subprocess, logging
 from typing import List
 from InquirerPy import inquirer
 from dotenv import load_dotenv
-from conifg import load_config
+from config import load_config # load_config uses logging
+import click # Added for click.echo in updateRepo
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
+logger.debug(f"BASE_PATH from env: {os.getenv('BASE_PATH')}")
 BASE_PATH = os.getenv("BASE_PATH")
 VSCODE_PATH = os.getenv("VSCODE_PATH")
 NPM_PATH = os.getenv("NPM_PATH")
@@ -36,7 +40,7 @@ def select_dir_with_package_json():
         ]
 
         if not dirs_with_package_json:
-            print("No directories with 'package.json' found.")
+            logger.warning("No directories with 'package.json' found.")
             return None
 
         # Prompt user to select a directory
@@ -59,9 +63,10 @@ def resolve_folder(folder_name):
     
     
     target_dir = os.path.join(BASE_PATH, folder_name)
-    print(f"Target dir: {target_dir}")
+    logger.debug(f"Resolved target_dir: {target_dir}")
     
     if not os.path.exists(target_dir):
+        logger.warning(f"Target directory {target_dir} does not exist.")
         return None
     
     return target_dir
@@ -89,6 +94,7 @@ def open_in_vscode():
     """
     Open current directory in VS Code (or code-server) and detach from terminal.
     """
+    logger.debug(f"Attempting to open VS Code at {os.getcwd()}")
     try:
         kwargs = {
             "stdout": subprocess.DEVNULL,
@@ -107,45 +113,56 @@ def open_in_vscode():
         subprocess.Popen([VSCODE_PATH, "."], **kwargs)
 
     except FileNotFoundError:
-        print("Error: VS Code or code-server not found.")
+        logger.error(f"Error: VS Code or code-server not found at VSCODE_PATH: {VSCODE_PATH}. Please check your .env file.")
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error opening VS Code: {e}")
 
 
 def run_npm_dev():
     """
         Run 'npm run dev' and handle errors.
     """
+    logger.debug(f"Running 'npm run dev' with NPM_PATH: {NPM_PATH}")
     try:
         subprocess.run([NPM_PATH, "run", "dev"], check=True)
     except subprocess.CalledProcessError as e:
-        click.echo(f"Error: Command 'npm run dev' failed with exit code {e.returncode}. Attempting recovery...")
+        logger.error(f"Error: Command 'npm run dev' failed with exit code {e.returncode}. Attempting recovery...")
+        logger.debug(e)
         try:
+            logger.info("Attempting 'npm i --force'...")
             subprocess.run([NPM_PATH, "i", "--force"], check=True)
+            logger.info("'npm i --force' completed. Please try running the dev command again.")
         except subprocess.CalledProcessError as install_error:
-            click.echo(f"Error: 'npm i --force' failed with exit code {install_error.returncode}.")
+            logger.error(f"Error: 'npm i --force' failed with exit code {install_error.returncode}.")
+            logger.debug(install_error)
     except FileNotFoundError:
-        click.echo("Error: 'npm' is not installed or not in your PATH.")
+        logger.error(f"Error: 'npm' is not installed or not in your PATH. NPM_PATH: {NPM_PATH}")
 
 
 def run_bun_dev():
     """
         Run 'bun dev' and handle errors.
     """
+    logger.debug(f"Running 'bun dev' with BUN_PATH: {BUN_PATH}")
     try:
         subprocess.run([BUN_PATH, "dev"], check=True)
     except subprocess.CalledProcessError as e:
-        click.echo(f"Error: Command 'bun dev' failed with exit code {e.returncode}. Attempting recovery...")
+        logger.error(f"Error: Command 'bun dev' failed with exit code {e.returncode}. Attempting recovery...")
+        logger.debug(e)
         try:
+            logger.info("Attempting 'bun install'...")
             subprocess.run([BUN_PATH, "install"], check=True)
+            logger.info("'bun install' completed. Please try running the dev command again.")
         except subprocess.CalledProcessError as install_error:
-            click.echo(f"Error: 'bun install' failed with exit code {install_error.returncode}.")
+            logger.error(f"Error: 'bun install' failed with exit code {install_error.returncode}.")
+            logger.debug(install_error)
     except FileNotFoundError:
-        click.echo("Error: 'bun' is not installed or not in your PATH.")
+        logger.error(f"Error: 'bun' is not installed or not in your PATH. BUN_PATH: {BUN_PATH}")
 
 
 def run_docker_compose_up(state, build, detach):
     ## Run docker-compose with the provided arguments
+    logger.debug(f"Running 'docker compose {state}' with build={build}, detach={detach}. DOCKER_PATH: {DOCKER_PATH}")
     args = [state]
     if build:
         args.append("--build")
@@ -153,11 +170,12 @@ def run_docker_compose_up(state, build, detach):
         args.append("--detach")
 
     try:
-        subprocess.run(["docker", "compose"] + args, check=True)
+        subprocess.run([DOCKER_PATH, "compose"] + args, check=True)
     except FileNotFoundError:
-        click.echo("Error: 'docker compose' is not installed or not in your PATH.")
+        logger.error(f"Error: 'docker compose' is not installed or not in your PATH. DOCKER_PATH: {DOCKER_PATH}")
     except subprocess.CalledProcessError as e:
-        click.echo(f"Error: Command 'docker compose {state}' failed with exit code {e.returncode}.")
+        logger.error(f"Error: Command 'docker compose {state}' failed with exit code {e.returncode}.")
+        logger.debug(e)
         
 
 def is_bun(folder: str) -> bool:
@@ -192,24 +210,42 @@ def updateRepo(force: bool, no_pull: bool) -> bool:
     """
         Update the repository by pulling the latest changes from the remote.
     """
+    logger.debug(f"Updating repo. Force: {force}, No Pull: {no_pull}")
     try:
         if force:
-            subprocess.run(["git", "fetch", "--all"])
-            subprocess.run(["git", "reset", "--hard", "origin/main"])
+            logger.warning("The --force option will discard any local changes and reset your current branch to origin/main.")
+            confirm_force_update = inquirer.confirm(
+                message="Are you sure you want to proceed with the force update? This is a destructive operation.",
+                default=False
+            ).execute()
+            if not confirm_force_update:
+                logger.info("Force update cancelled by the user.")
+                click.echo("Force update cancelled.")
+                return False # Indicate that the update was cancelled
+            
+            logger.info("Forcing update: git fetch --all and git reset --hard origin/main")
+            subprocess.run(["git", "fetch", "--all"], check=True)
+            subprocess.run(["git", "reset", "--hard", "origin/main"], check=True)
+            logger.info("Force update successful.")
             return True
         elif not no_pull:
-            subprocess.run(["git", "pull"])
+            logger.info("Pulling latest changes: git pull")
+            subprocess.run(["git", "pull"], check=True)
+            logger.info("Git pull successful.")
             return True
     except subprocess.CalledProcessError as e:
-        click.echo(f"Error: Command 'git pull' failed with exit code {e.returncode}.")
+        logger.error(f"Error: Git command failed with exit code {e.returncode}.")
+        logger.debug(e)
         return False
     except FileNotFoundError:
-        click.echo("Error: 'git' is not installed or not in your PATH.")
+        logger.error("Error: 'git' is not installed or not in your PATH.")
         return False
     except Exception as e:
-        click.echo(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred during repo update: {e}")
+        logger.debug(e)
         return False
 
+    logger.debug("Repo update skipped as no_pull is True and force is False.")
     return False
     
 
@@ -217,17 +253,23 @@ def run_install_package(package_manager: str):
     """
         Run the package manager's install command.
     """
+    logger.debug(f"Running install for package manager: {package_manager}")
     try:
         if package_manager == "npm":
+            logger.info(f"Running 'npm install' with NPM_PATH: {NPM_PATH}")
             subprocess.run([NPM_PATH, "install"], check=True)
+            logger.info("'npm install' successful.")
         elif package_manager == "bun":
+            logger.info(f"Running 'bun install' with BUN_PATH: {BUN_PATH}")
             subprocess.run([BUN_PATH, "install"], check=True)
+            logger.info("'bun install' successful.")
         else:
-            click.echo(f"Error: Unsupported package manager '{package_manager}'.")
+            logger.error(f"Error: Unsupported package manager '{package_manager}'.")
     except subprocess.CalledProcessError as e:
-        click.echo(f"Error: Command '{package_manager} install' failed with exit code {e.returncode}.")
+        logger.error(f"Error: Command '{package_manager} install' failed with exit code {e.returncode}.")
+        logger.debug(e)
     except FileNotFoundError:
-        click.echo(f"Error: '{package_manager}' is not installed or not in your PATH.")
+        logger.error(f"Error: '{package_manager}' is not installed or not in your PATH. Path for {package_manager.upper()}_PATH might be missing in .env or incorrect.")
 
 
 PROJECT_DETECTORS = {
