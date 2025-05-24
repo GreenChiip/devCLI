@@ -1,0 +1,13 @@
+{
+    "name": "project5-set-no-json",
+    "version": "0.1.0",
+    "description": "In-place init for project5",
+    "author": "Test User",
+    "project_type_key": "simple-python-cli",
+    "project_type_name": "Python (Simple CLI)",
+    "use_docker_preference": false,
+    "useCompose": false,
+    "startup": ".venv/bin/python main.py",
+    "dockerfile_template": null,
+    "docker_compose_template": null
+}

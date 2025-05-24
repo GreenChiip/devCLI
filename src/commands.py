@@ -3,9 +3,17 @@ from dotenv import load_dotenv
 from InquirerPy import inquirer
 
 logger = logging.getLogger(__name__)
-from utils import run_install_package, updateRepo, open_in_vscode, run_npm_dev, is_bun, PROJECT_DETECTORS, TAG_COLORS, run_bun_dev, select_dir_with_package_json, resolve_folder, validate_package_json, change_directory, run_docker_compose_up
+from utils import resolve_folder # Keep other utils imports if used by other commands
+# Remove unused utils like run_install_package, updateRepo, open_in_vscode, run_npm_dev, is_bun, etc. if only run_dev is changing
+# For now, assume they might be used by other commands or future states.
+from utils import run_install_package, updateRepo, open_in_vscode, run_npm_dev, is_bun, PROJECT_DETECTORS, TAG_COLORS, run_bun_dev, select_dir_with_package_json, validate_package_json, change_directory, run_docker_compose_up
+
 from config import handle_add_alias, handle_remove_alias, handle_list_aliases, load_config, save_config
-from create import get_project_details, generate_project_json, create_project_files
+# from create import get_project_details, generate_project_json, create_project_files # Keep if init uses them
+from create import get_project_details, generate_project_json, create_project_files, handle_in_place_init
+
+import json # Added for run_dev
+import subprocess # Added for run_dev
 
 load_dotenv()
 
@@ -19,31 +27,111 @@ BASE_PATH = os.getenv("BASE_PATH")
 config = load_config()
 aliases = load_config("alias")
 
-@click.command("run", help="Run 'npm run dev' in the specified folder.")
+@click.command("run", help="Run the startup command defined in devCLI-project.json for the specified folder.")
 @click.argument('folder_name')
 def run_dev(folder_name):
     logger.debug(f"run_dev called with folder_name: {folder_name}")
     target_dir = resolve_folder(folder_name)
     if not target_dir:
-        logger.error("No valid directory selected or directory does not exist.")
+        logger.error(f"Could not resolve folder '{folder_name}'. It might not exist or an alias is incorrect.")
+        # click.echo(f"Error: Folder '{folder_name}' not found.") # Redundant with resolve_folder's logging
         return
-    
-    if not validate_package_json(target_dir):
-        logger.warning(f"'package.json' not found in {target_dir}. Attempting to select a different directory.")
-        target_dir = select_dir_with_package_json() # Removed target_dir argument
-        if not target_dir:
-            logger.error(f"Error: 'package.json' does not exist in the folder '{target_dir}'.")
+
+    project_json_path = os.path.join(target_dir, "devCLI-project.json")
+    logger.debug(f"Looking for project config at: {project_json_path}")
+
+    if os.path.exists(project_json_path):
+        try:
+            with open(project_json_path, "r") as f:
+                project_config = json.load(f)
+            
+            startup_command = project_config.get("startup")
+            if not startup_command:
+                logger.error(f"'startup' command not found in {project_json_path}.")
+                click.echo(f"Error: 'startup' command missing in {project_json_path}.")
+                return
+            
+            logger.info(f"Executing startup command for '{folder_name}' in '{target_dir}': {startup_command}")
+            click.echo(f"Attempting to start project '{folder_name}' using command: {startup_command}")
+            
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(target_dir)
+                logger.debug(f"Changed CWD to: {target_dir}")
+                # Using shell=True for flexibility with commands like '&&' or environment sourcing.
+                # Ensure startup_command is trusted.
+                subprocess.run(startup_command, shell=True, check=True)
+            except FileNotFoundError:
+                cmd_name = startup_command.split()[0]
+                logger.error(f"Error: The command '{cmd_name}' was not found. Ensure it is installed and in your PATH.")
+                click.echo(f"Error: Command not found: {cmd_name}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Project startup command '{startup_command}' failed with exit code {e.returncode}.")
+                click.echo(f"Error: Project startup failed (exit code {e.returncode}).")
+            except Exception as e:
+                logger.error(f"An unexpected error occurred during startup: {str(e)}")
+                click.echo(f"An unexpected error occurred: {str(e)}")
+            finally:
+                os.chdir(original_cwd)
+                logger.debug(f"Restored CWD to: {original_cwd}")
+
+        except json.JSONDecodeError:
+            logger.error(f"Error decoding {project_json_path}. It might be corrupted.")
+            click.echo(f"Error: Could not parse {project_json_path}.")
             return
-
-    change_directory(target_dir)
-    logger.info(f"Changed directory to: {target_dir}")
-
-    if is_bun(target_dir):
-        logger.info("Detected 'bun.lock'. Running 'bun dev'...")
-        run_bun_dev()
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while reading {project_json_path}: {str(e)}")
+            click.echo(f"An unexpected error occurred: {str(e)}")
+            return
     else:
-        logger.info("Running 'npm run dev'...")
-        run_npm_dev()
+        logger.info(f"devCLI-project.json not found in {target_dir} for folder '{folder_name}'.")
+        if inquirer.confirm(
+            message=f"devCLI-project.json not found in '{folder_name}'. Would you like to initialize it now?",
+            default=True
+        ).execute():
+            logger.info(f"User opted to initialize '{folder_name}' in place.")
+            success = handle_in_place_init(target_dir, os.path.basename(target_dir))
+            if success:
+                click.echo(f"Project '{os.path.basename(target_dir)}' initialized. Attempting to run startup command...")
+                # Re-attempt to load the json and run
+                if os.path.exists(project_json_path):
+                    try:
+                        with open(project_json_path, "r") as f:
+                            project_config_reloaded = json.load(f) # Use new var name
+                        startup_command_reloaded = project_config_reloaded.get("startup")
+                        if not startup_command_reloaded:
+                            logger.error(f"'startup' command not found in {project_json_path} after in-place init.")
+                            click.echo(f"Error: 'startup' command still missing after init in {project_json_path}.")
+                            return 
+                        
+                        logger.info(f"Executing startup command for {os.path.basename(target_dir)} after in-place init: {startup_command_reloaded}")
+                        # CWD management for this new execution block
+                        original_cwd_after_init = os.getcwd()
+                        try:
+                            os.chdir(target_dir)
+                            subprocess.run(startup_command_reloaded, shell=True, check=True)
+                        except FileNotFoundError:
+                            cmd_name_reloaded = startup_command_reloaded.split()[0]
+                            logger.error(f"Error: Post-init command '{cmd_name_reloaded}' was not found.")
+                            click.echo(f"Error: Post-init command not found: {cmd_name_reloaded}")
+                        except subprocess.CalledProcessError as e_reloaded:
+                            logger.error(f"Post-init startup command failed with exit code {e_reloaded.returncode}.")
+                            click.echo(f"Error: Post-init project startup failed (exit code {e_reloaded.returncode}).")
+                        except Exception as e_reloaded_general:
+                            logger.error(f"An unexpected error occurred during post-init startup: {str(e_reloaded_general)}")
+                            click.echo(f"An unexpected error occurred during post-init startup: {str(e_reloaded_general)}")
+                        finally:
+                            os.chdir(original_cwd_after_init)
+                            logger.debug(f"Restored CWD to: {original_cwd_after_init} after post-init attempt.")
+                    except Exception as e_reloaded_file: # Catch errors reading/parsing the newly created json
+                        logger.error(f"Failed to run project after in-place init (file read error): {e_reloaded_file}", exc_info=True)
+                        click.echo(f"Error running project after initialization (file read error): {e_reloaded_file}")
+                else:
+                    logger.error(f"{project_json_path} not found after supposed successful in-place init.")
+                    click.echo("Initialization seemed to complete, but the project config file is missing.")
+            else:
+                click.echo(f"Failed to initialize project '{os.path.basename(target_dir)}'.")
+        return # Important to return after handling the in-place init attempt
 
 @click.command("alias", help="Add or remove an alias.")
 @click.argument("action", required=False)
@@ -265,56 +353,142 @@ def update(folder_name, force = False , no_pull = False):
         click.echo("No updates available or an error occurred.") # User facing
 
 
-@click.command("start", help="Start the current default selected project.")
-@click.option('setProject', "--set", help="Set a project to start by default.", default=None)
-@click.option('code', '--code', is_flag=True, help="Open the project in VSCode.")
-def start(setProject = None, code = True):
+@click.command("start", help="Start the current default project or set a new default project.")
+@click.option('setproject', "--set", help="Set a project to be the default for 'start'.", default=None, metavar='FOLDER_NAME_OR_ALIAS')
+# The --code flag is removed as per the plan, simplifying 'start' to focus on the startup command.
+def start(setproject): # Removed 'code' parameter
     """
-    Start the current selected project.
+    Starts the current default project using its 'startup' command from devCLI-project.json.
+    If --set is used, it updates the default project.
     """
-    logger.debug(f"start command called with setProject: {setProject}, code: {code}")
-    if setProject:
-        target_dir = resolve_folder(setProject)
-        if not target_dir:
-            logger.error(f"Cannot set project. Folder '{setProject}' not found or alias is incorrect.")
+    cli_config = load_config() # Load main CLI config (config.json)
+    logger.debug(f"start command called with --set='{setproject}'. Current cli_config: {cli_config}")
+
+    if setproject:
+        logger.debug(f"Attempting to set '{setproject}' as the current project.")
+        # Ensure resolve_folder is available
+        # from utils import resolve_folder # Already imported at top
+        target_dir_to_set = resolve_folder(setproject) # resolve_folder handles logging for not found
+        
+        if not target_dir_to_set:
+            # resolve_folder already logs and potentially echos, but an extra echo here for clarity is fine.
+            click.echo(f"Error: Cannot set default project. Folder or alias '{setproject}' not found.")
             return
-        config["currentProject"] = setProject
-        save_config(config) # This function in config.py will also need logger
-        logger.info(f"Current project set to: {setProject}")
-        click.echo(f"Current project set to: {setProject}") # User facing
+
+        # We store the original name/alias used with --set, not the resolved path.
+        # This is because resolve_folder gives an absolute path, but currentProject should be the name/alias.
+        cli_config["currentProject"] = setproject 
+        save_config(cli_config) # save_config is from src.config
+        logger.info(f"Default project set to: '{setproject}'.")
+        click.echo(f"Default project set to: '{setproject}'.")
+        return # Setting the project is a distinct action.
+
+    # Determine Target Directory for Starting
+    target_dir_name = cli_config.get("currentProject")
+    if not target_dir_name:
+        logger.error("No default project is set. Use `devcli start --set <project_name>` to set one.")
+        click.echo("No default project set. Use `devcli start --set <project_name_or_alias>`.")
         return
 
-    current_project_name = config.get("currentProject")
-    if not current_project_name:
-        logger.error("No current project set. Use `devcli start --set <project_name>` to set one.")
-        return
-
-    target_dir = resolve_folder(current_project_name)
+    logger.debug(f"Current default project to start: '{target_dir_name}'.")
+    target_dir = resolve_folder(target_dir_name)
     if not target_dir:
-        logger.error(f"Current project '{current_project_name}' not found. Please select a valid project.")
+        logger.error(f"Default project '{target_dir_name}' could not be resolved. It might have been moved, deleted, or its alias is broken.")
+        click.echo(f"Error: Default project '{target_dir_name}' not found. Please set a new one or check the alias.")
         return
 
-    change_directory(target_dir)
-    logger.info(f"Changed directory to current project: {target_dir}")
+    project_json_path = os.path.join(target_dir, "devCLI-project.json")
+    logger.debug(f"Looking for project config at: {project_json_path}")
 
-    if code: # Check if code flag is true
-        logger.debug("Opening project in VSCode due to --code flag or default behavior.")
-        open_in_vscode()
+    if os.path.exists(project_json_path):
+        try:
+            with open(project_json_path, "r") as f:
+                project_config = json.load(f)
+            startup_command = project_config.get("startup")
 
-    if not validate_package_json(target_dir):
-        logger.info(f"'package.json' not found in {target_dir}. Only opening in VSCode if specified.")
-        # open_in_vscode() was here, moved up to handle --code flag independently
-        return
-    
-    if is_bun(target_dir):
-        logger.info("Detected 'bun.lock'. Running 'bun dev'...")
-        click.echo("Detected 'bun.lock'. Running 'bun dev'...") # User facing
-        # open_in_vscode() was here, moved up
-        run_bun_dev()
+            if not startup_command:
+                logger.error(f"'startup' command not found in {project_json_path} for project {target_dir_name}.")
+                click.echo(f"Error: 'startup' command missing in {project_json_path}.")
+                return
+            
+            logger.info(f"Executing startup command for current project {target_dir_name}: {startup_command}")
+            click.echo(f"Attempting to start project '{target_dir_name}' using command: {startup_command}")
+
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(target_dir)
+                logger.debug(f"Changed CWD to: {target_dir}")
+                subprocess.run(startup_command, shell=True, check=True)
+            except FileNotFoundError:
+                cmd_name = startup_command.split()[0]
+                logger.error(f"Error: The command '{cmd_name}' was not found. Ensure it is installed and in your PATH.")
+                click.echo(f"Error: Command not found: {cmd_name}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Project startup command failed with exit code {e.returncode}.")
+                click.echo(f"Error: Project startup failed (exit code {e.returncode}).")
+            except Exception as e:
+                logger.error(f"An unexpected error occurred during startup: {str(e)}")
+                click.echo(f"An unexpected error occurred: {str(e)}")
+            finally:
+                os.chdir(original_cwd)
+                logger.debug(f"Restored CWD to: {original_cwd}")
+
+        except json.JSONDecodeError:
+            logger.error(f"Error decoding {project_json_path} for project {target_dir_name}.")
+            click.echo(f"Error: Could not parse {project_json_path}.")
+            return
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while reading project config for {target_dir_name}: {str(e)}")
+            click.echo(f"An unexpected error occurred: {str(e)}")
+            return
     else:
-        logger.info("Running 'npm run dev'...")
-        # open_in_vscode() was here, moved up
-        run_npm_dev()
+        logger.info(f"devCLI-project.json not found in {target_dir} for project {target_dir_name}.")
+        if inquirer.confirm(
+            message=f"devCLI-project.json not found for '{target_dir_name}'. Would you like to initialize it now?",
+            default=True
+        ).execute():
+            logger.info(f"User opted to initialize '{target_dir_name}' in place.")
+            success = handle_in_place_init(target_dir, os.path.basename(target_dir_name)) # Use target_dir_name for basename
+            if success:
+                click.echo(f"Project '{os.path.basename(target_dir_name)}' initialized. Attempting to run startup command...")
+                # Re-attempt to load the json and run
+                if os.path.exists(project_json_path):
+                    try:
+                        with open(project_json_path, "r") as f:
+                            project_config_reloaded = json.load(f)
+                        startup_command_reloaded = project_config_reloaded.get("startup")
+                        if not startup_command_reloaded:
+                            logger.error(f"'startup' command not found in {project_json_path} after in-place init.")
+                            click.echo(f"Error: 'startup' command still missing after init in {project_json_path}.")
+                            return
+                        
+                        logger.info(f"Executing startup command for {os.path.basename(target_dir_name)} after in-place init: {startup_command_reloaded}")
+                        original_cwd_after_init = os.getcwd()
+                        try:
+                            os.chdir(target_dir)
+                            subprocess.run(startup_command_reloaded, shell=True, check=True)
+                        except FileNotFoundError:
+                            cmd_name_reloaded = startup_command_reloaded.split()[0]
+                            logger.error(f"Error: Post-init command '{cmd_name_reloaded}' was not found.")
+                            click.echo(f"Error: Post-init command not found: {cmd_name_reloaded}")
+                        except subprocess.CalledProcessError as e_reloaded:
+                            logger.error(f"Post-init startup command failed with exit code {e_reloaded.returncode}.")
+                            click.echo(f"Error: Post-init project startup failed (exit code {e_reloaded.returncode}).")
+                        except Exception as e_reloaded_general:
+                            logger.error(f"An unexpected error occurred during post-init startup: {str(e_reloaded_general)}")
+                            click.echo(f"An unexpected error occurred during post-init startup: {str(e_reloaded_general)}")
+                        finally:
+                            os.chdir(original_cwd_after_init)
+                            logger.debug(f"Restored CWD to: {original_cwd_after_init} after post-init attempt.")
+                    except Exception as e_reloaded_file:
+                        logger.error(f"Failed to run project after in-place init (file read error): {e_reloaded_file}", exc_info=True)
+                        click.echo(f"Error running project after initialization (file read error): {e_reloaded_file}")
+                else:
+                    logger.error(f"{project_json_path} not found after supposed successful in-place init.")
+                    click.echo("Initialization seemed to complete, but the project config file is missing.")
+            else:
+                click.echo(f"Failed to initialize project '{os.path.basename(target_dir_name)}'.")
+        return # Important to return after handling the in-place init attempt
 
 
 @click.command("cd", help="Change directory to the specified folder.")

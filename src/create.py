@@ -13,48 +13,55 @@ CLI_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 logger.debug(f"CLI_ROOT_DIR determined as: {CLI_ROOT_DIR}")
 
 load_dotenv() 
-BASE_PATH = os.getenv("BASE_PATH")
+BASE_PATH = os.getenv("BASE_PATH") # Used for new projects and potentially by resolve_folder
+NPX_PATH = os.getenv("NPX_PATH") # Used by initCommand for Next.js
+
+# These are loaded globally in commands.py, but for create.py to use them if needed directly:
+# config = load_config() 
+# aliases = load_config("alias")
+# However, it's better if functions like handle_add_alias are passed the aliases object from commands.py.
+# For now, assuming config/aliases loaded here if needed by functions in this module directly,
+# or they are passed in as args. `load_config` is used in `get_project_details`.
 
 
-load_dotenv()
-NPX_PATH = os.getenv("NPX_PATH")
-
-config = load_config()
-aliases = load_config("alias")
-
-def get_project_details():
+def get_project_details(existing_project_name: str = None, existing_project_path: str = None):
     """
     Prompt the user for project details and return them as a dictionary.
+    Can pre-fill project name and path for in-place initialization.
     """
-    project_name_input = inquirer.text(message="Enter the project name:").execute()
-    if not project_name_input.strip():
-        logger.error("Project name cannot be empty.")
-        click.echo("❌ Project name cannot be empty.")
-        return {} # Or None
+    final_project_name = None
+    project_path_to_use = None
 
-    # Project name uniqueness check (folder existence)
-    # Assuming BASE_PATH is loaded correctly
-    if not BASE_PATH:
-        logger.error("BASE_PATH is not set. Cannot check for existing project directories.")
-        click.echo("❌ Error: BASE_PATH is not configured. Please set it in your .env file for project creation.")
-        return {}
+    if existing_project_name and existing_project_path:
+        logger.info(f"Getting project details for existing project: {existing_project_name} at {existing_project_path}")
+        final_project_name = existing_project_name
+        project_path_to_use = existing_project_path
+        # Description and author will still be prompted for, allowing customization even for existing dirs.
+    else:
+        if not BASE_PATH: # Crucial for creating new projects
+            logger.error("BASE_PATH is not set. Cannot create new project or check for existing directories.")
+            click.echo("❌ Error: BASE_PATH is not configured. Please set it in your .env file.")
+            return {}
 
-    final_project_name = project_name_input
-    # Use a simplified check here directly, or rely on os.makedirs in commands.py to fail if dir exists
-    # For a better user experience, checking here is good.
-    # resolve_folder might be too heavy if it does more than just path construction and check.
-    # Let's do a direct check for the folder based on input name.
-    prospective_path = os.path.join(BASE_PATH, project_name_input)
-    if os.path.exists(prospective_path):
-        logger.warning(f"Directory '{project_name_input}' already exists at {prospective_path}.")
-        current_time = datetime.now().strftime('%Y%m%d%H%M%S')
-        final_project_name = f"{project_name_input}-{current_time}"
-        click.echo(f"⚠️ Folder '{project_name_input}' already exists. Name changed to '{final_project_name}'.")
-        logger.info(f"Project name changed to '{final_project_name}' due to existing directory.")
+        project_name_input = inquirer.text(message="Enter the project name:").execute()
+        if not project_name_input.strip():
+            logger.error("Project name cannot be empty.")
+            click.echo("❌ Project name cannot be empty.")
+            return {}
 
+        final_project_name = project_name_input
+        prospective_path = os.path.join(BASE_PATH, project_name_input)
+        if os.path.exists(prospective_path):
+            logger.warning(f"Directory '{project_name_input}' already exists at {prospective_path}.")
+            current_time = datetime.now().strftime('%Y%m%d%H%M%S')
+            final_project_name = f"{project_name_input}-{current_time}"
+            click.echo(f"⚠️ Folder '{project_name_input}' already exists. Name changed to '{final_project_name}'.")
+            logger.info(f"Project name changed to '{final_project_name}' due to existing directory.")
+        
+        project_path_to_use = os.path.join(BASE_PATH, final_project_name)
 
     project_description = inquirer.text(message="Enter the project description:", default="A new project").execute()
-    project_author = inquirer.text(message="Enter the author name:", default="Your Name").execute() # Changed default
+    project_author = inquirer.text(message="Enter the author name:", default="Your Name").execute()
 
     # Load Project Types from config.json
     cli_config = load_config() # Loads main config.json
@@ -99,11 +106,12 @@ def get_project_details():
     ).execute()
 
     return {
-        "name": final_project_name, # Use the potentially modified unique name
+        "name": final_project_name,
+        "path": project_path_to_use, # Absolute path to the project
         "description": project_description,
         "author": project_author,
         "chosen_project_type_key": chosen_project_type_key,
-        "project_type_config": selected_config, # The actual config dict for the chosen type
+        "project_type_config": selected_config,
         "use_docker": use_docker
     }
 
@@ -166,32 +174,39 @@ def generate_project_json(project_details):
         "docker_compose_template": docker_compose_path_template if use_docker_choice else None,
     }
     
-    project_json_target_path = os.path.join(BASE_PATH, project_name, "devCLI-project.json")
+    # The project_details['path'] is the absolute path to the project directory.
+    # devCLI-project.json should be created inside this path.
+    if not project_details.get("path"):
+        logger.error("generate_project_json called but 'path' is missing in project_details.")
+        click.echo("❌ Error: Project path missing, cannot generate devCLI-project.json.")
+        return
+        
+    project_json_target_path = os.path.join(project_details["path"], "devCLI-project.json")
     logger.debug(f"Generating devCLI-project.json at: {project_json_target_path} with data: {project_json_data}")
     
     try:
         with open(project_json_target_path, "w") as f:
             json.dump(project_json_data, f, indent=4)
-        logger.info(f"Created devCLI-project.json in {project_name}")
-        click.echo(f"📄 Created devCLI-project.json in {project_name}")
+        logger.info(f"Created devCLI-project.json in {project_details['name']}") # Use name for logging simplicity
+        click.echo(f"📄 Created devCLI-project.json in {project_details['name']}")
     except IOError as e:
-        logger.error(f"Failed to write devCLI-project.json for {project_name}: {e}")
+        logger.error(f"Failed to write devCLI-project.json for {project_details['name']}: {e}")
         click.echo(f"❌ Error writing devCLI-project.json: {e}")
 
 
-def create_project_structure_from_command(project_details): # Renamed from create_node_files
+def create_project_structure_from_command(project_details):
     project_name = project_details.get("name")
+    project_root_path = project_details.get("path") # Absolute path to the project
     project_config = project_details.get("project_type_config")
     init_command_template = project_config.get("initCommand")
 
-    if not all([project_name, project_config, init_command_template, BASE_PATH]): # Ensure BASE_PATH is also available
-        logger.error("create_project_structure_from_command called with incomplete details or missing BASE_PATH.")
-        click.echo("❌ Error: Cannot create project structure due to missing configuration or BASE_PATH.")
+    if not all([project_name, project_root_path, project_config, init_command_template]):
+        logger.error("create_project_structure_from_command called with incomplete details.")
+        click.echo("❌ Error: Cannot create project structure due to missing configuration or project path.")
         return
 
     logger.info(f"Creating project structure for '{project_name}' using type '{project_details.get('chosen_project_type_key')}'.")
-    project_root_path = os.path.join(BASE_PATH, project_name) # This is project_details['path'] equivalent
-    
+    # initCommand is executed from within project_root_path
     init_command = init_command_template
     logger.info(f"Executing initialization command in {project_root_path}: {init_command}")
     
@@ -250,7 +265,63 @@ def create_project_structure_from_command(project_details): # Renamed from creat
 
 
 def create_project_files(project_details):
-    # CWD is expected to be BASE_PATH when this is called from commands.py's init.
-    # The project directory (project_details["name"]) itself is created in commands.py's init.
+    # CWD for create_project_files (and thus this function) is BASE_PATH from commands.py's init.
+    # The project directory (project_details["name"] or project_details["path"]) itself is created in commands.py's init.
     create_project_structure_from_command(project_details)
+
+
+def handle_in_place_init(target_dir: str, folder_name: str) -> bool:
+    """
+    Handles the in-place initialization of an existing directory.
+    Prompts user for project details, generates devCLI-project.json,
+    and runs the initCommand for the chosen project type.
+
+    Args:
+        target_dir: Absolute path to the existing project directory.
+        folder_name: Base name of the project directory.
+
+    Returns:
+        True if initialization was successful and devCLI-project.json was created, False otherwise.
+    """
+    click.echo(f"Starting in-place initialization for project: {folder_name} at {target_dir}")
+    logger.info(f"Handling in-place init for directory: {target_dir}, folder name: {folder_name}")
+
+    # 1. Get project details, pre-filling name and path
+    project_details = get_project_details(
+        existing_project_name=folder_name,
+        existing_project_path=target_dir
+    )
+
+    if not project_details or not project_details.get("chosen_project_type_key"):
+        logger.error(f"Failed to get project details during in-place init for {folder_name}.")
+        click.echo("Project detail gathering failed or was aborted. Initialization cancelled.")
+        return False
+
+    # 2. Generate devCLI-project.json
+    # generate_project_json now uses project_details['path']
+    try:
+        generate_project_json(project_details) 
+        logger.info(f"devCLI-project.json generated for {folder_name} at {project_details['path']}.")
+    except Exception as e:
+        logger.error(f"Failed to generate devCLI-project.json for {folder_name}: {e}", exc_info=True)
+        click.echo(f"Error generating devCLI-project.json: {e}")
+        return False
+
+    # 3. Run initCommand and copy Docker files (if applicable)
+    # create_project_structure_from_command also uses project_details['path']
+    try:
+        # This function should run initCommand *inside* project_details['path']
+        # and copy Docker templates *into* project_details['path'].
+        create_project_structure_from_command(project_details)
+        logger.info(f"Project structure initialized for {folder_name} using command: {project_details['project_type_config'].get('initCommand')}")
+    except Exception as e:
+        logger.error(f"Failed during structure initialization for {folder_name}: {e}", exc_info=True)
+        click.echo(f"Error during project structure initialization: {e}")
+        # Note: devCLI-project.json was created, but initCommand failed. This is a partial success.
+        # Depending on desired behavior, you might want to remove the json or leave it.
+        # For now, we'll consider it a failure to fully init.
+        return False
+            
+    click.echo(f"Project '{folder_name}' has been configured.")
+    return True
 

@@ -1,0 +1,13 @@
+{
+    "name": "obs-simple-py-docker",
+    "version": "0.1.0",
+    "description": "Observable Simple Python Docker",
+    "author": "Test User",
+    "project_type_key": "simple-python-cli",
+    "project_type_name": "Python (Simple CLI)",
+    "use_docker_preference": true,
+    "useCompose": false,
+    "startup": "docker build -t simple-python-cli-app . && docker run --rm simple-python-cli-app",
+    "dockerfile_template": "docker/simple-python-cli/Dockerfile",
+    "docker_compose_template": null
+}
