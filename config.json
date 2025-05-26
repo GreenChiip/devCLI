@@ -1,6 +1,46 @@
 {
     "name": "devCLI",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "A CLI for running and managing projects",
-    "currentProject": "menju"
+    "currentProject": "project5-set-no-json",
+    "BASE_PATH": "test_projects",
+    "CONFIG_PATH": "config.json",
+    "ALIAS_PATH": "aliases.json",
+    "NPX_PATH": "/usr/local/bin/npx",
+    "VSCODE_PATH": "code",
+    "NPM_PATH": "/usr/local/bin/npm",
+    "DOCKER_PATH": "/usr/local/bin/docker",
+    "BUN_PATH": "/usr/local/bin/bun",
+    "initialized_commands": {
+        "nextjs-npm": {
+            "name": "Next.js (NPM)",
+            "description": "Initialize a Next.js project using NPM and standard Next.js template.",
+            "initCommand": "npx create-next-app@latest . --yes --typescript --eslint --tailwind --src-dir --app --import-alias \"@/*\"",
+            "localStartupCommand": "npm run dev",
+            "dockerStartupCommand": "docker-compose up --build",
+            "dockerfilePath": "docker/nextjs/Dockerfile",
+            "dockerComposePath": "docker/nextjs/docker-compose.yml",
+            "defaultUseCompose": true
+        },
+        "python-fastapi": {
+            "name": "Python (FastAPI)",
+            "description": "Initialize a Python project with FastAPI.",
+            "initCommand": "python3 -m venv .venv && . .venv/bin/activate && pip install fastapi uvicorn && touch main.py && echo 'from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/\")\nasync def root():\n    return {\"message\": \"Hello World\"}' > main.py",
+            "localStartupCommand": ".venv/bin/uvicorn main:app --reload",
+            "dockerStartupCommand": "docker-compose up --build",
+            "dockerfilePath": "docker/python-fastapi/Dockerfile",
+            "dockerComposePath": "docker/python-fastapi/docker-compose.yml",
+            "defaultUseCompose": true
+        },
+        "simple-python-cli": {
+            "name": "Python (Simple CLI)",
+            "description": "Initialize a basic Python script with a virtual environment.",
+            "initCommand": "python3 -m venv .venv && . .venv/bin/activate && touch main.py && echo 'print(\"Hello from basic Python script!\")' > main.py",
+            "localStartupCommand": ".venv/bin/python main.py",
+            "dockerStartupCommand": "docker build -t simple-python-cli-app . && docker run --rm simple-python-cli-app",
+            "dockerfilePath": "docker/simple-python-cli/Dockerfile",
+            "dockerComposePath": null,
+            "defaultUseCompose": false
+        }
+    }
 }

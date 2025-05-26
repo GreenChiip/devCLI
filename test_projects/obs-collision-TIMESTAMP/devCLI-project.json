@@ -1,0 +1,13 @@
+{
+    "name": "obs-collision-TIMESTAMP",
+    "version": "0.1.0",
+    "description": "Second collision test",
+    "author": "Test User",
+    "project_type_key": "python-fastapi",
+    "project_type_name": "Python (FastAPI)",
+    "use_docker_preference": false,
+    "useCompose": false,
+    "startup": ".venv/bin/uvicorn main:app --reload",
+    "dockerfile_template": null,
+    "docker_compose_template": null
+}

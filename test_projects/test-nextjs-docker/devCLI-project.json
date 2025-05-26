@@ -1,0 +1,13 @@
+{
+    "name": "test-nextjs-docker",
+    "version": "0.1.0",
+    "description": "Test Next.js with Docker",
+    "author": "Test User",
+    "project_type_key": "nextjs-npm",
+    "project_type_name": "Next.js (NPM)",
+    "use_docker_preference": true,
+    "useCompose": true,
+    "startup": "docker-compose up --build",
+    "dockerfile_template": "docker/nextjs/Dockerfile",
+    "docker_compose_template": "docker/nextjs/docker-compose.yml"
+}
