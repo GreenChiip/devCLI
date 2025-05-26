@@ -3,8 +3,7 @@ from datetime import datetime
 from InquirerPy import inquirer
 from dotenv import load_dotenv
 
-from config import handle_add_alias, load_config
-from utils import resolve_folder
+from config import load_config
 
 logger = logging.getLogger(__name__)
 

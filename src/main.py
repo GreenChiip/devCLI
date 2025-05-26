@@ -1,3 +1,4 @@
+import sys
 import click, logging, os
 from commands import run_dev, alias, code, docker, init, list_folders, update, help, start, config_cmd
 
